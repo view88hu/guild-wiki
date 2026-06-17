@@ -203,7 +203,6 @@
   .read-fig{margin:0;display:flex;flex-direction:column;align-items:center;gap:9px}
   .read-cap{font-size:12.5px;color:var(--muted);text-align:center;line-height:1.5}
   #detailView.reading .detail-toolbar,
-  #detailView.reading #deleteGuideBtn,
   #detailView.reading .blk-ctrl,
   #detailView.reading #blocksEmpty{display:none!important}
   #detailView.reading .detail-icon{cursor:default;pointer-events:none}
@@ -221,6 +220,12 @@
   .toast.err{border-color:var(--danger)}
 
   .foot{text-align:center;color:var(--dim);font-size:11.5px;margin-top:30px}
+
+  /* 화면 전환: hidden 속성 대신 명시적 display 제어 */
+  #gridView.hidden-view,
+  #detailView.hidden-view{display:none!important}
+  #detailView{display:none}
+  #detailView.active-view{display:flex}
 
   @media(max-width:760px){
     .detail-head{flex-wrap:wrap}
@@ -254,11 +259,12 @@
   </div>
 
   <!-- 상세/편집 화면 -->
-  <div id="detailView" hidden>
+  <div id="detailView">
     <div class="detail-top">
       <button class="ghostbtn" id="backBtn">← 목록으로</button>
       <div style="display:flex;align-items:center;gap:10px">
         <span class="save-indicator" id="saveIndicator">대기 중</span>
+        <button class="dangerbtn" id="deleteGuideBtn">🗑 삭제</button>
         <button class="ghostbtn" id="viewToggleBtn">👁 게시글 보기</button>
       </div>
     </div>
@@ -269,7 +275,6 @@
         <input class="detail-title-input" id="dTitle" placeholder="가이드 제목">
         <input class="detail-desc-input" id="dDesc" placeholder="한 줄 설명 (선택)">
       </div>
-      <button class="dangerbtn" id="deleteGuideBtn">🗑 가이드 삭제</button>
     </div>
     <div class="detail-toolbar">
       <button class="tbtn" id="addTextBtn">📝 텍스트 추가</button>
@@ -301,6 +306,23 @@
     <input id="ngTitle" placeholder="가이드 제목 (예: 연구 올리는 방법)" maxlength="40">
     <textarea id="ngDesc" placeholder="한 줄 설명 (선택)" rows="2" maxlength="80"></textarea>
     <button class="primarybtn" id="ngCreateBtn" style="width:100%;justify-content:center;padding:11px 0">만들기</button>
+  </div>
+</div>
+
+<!-- 관리자 비밀번호 확인 모달 -->
+<div class="modal-overlay" id="adminModal">
+  <div class="modal-card" style="max-width:340px">
+    <div class="modal-head">
+      <h3>🔒 관리자 확인</h3>
+      <button class="modal-x" id="adminClose">×</button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">가이드 삭제는 관리자만 가능해요.<br>관리자 비밀번호를 입력해주세요.</p>
+    <div style="position:relative">
+      <input type="password" id="adminPw" placeholder="비밀번호 입력" maxlength="30" style="padding-right:40px">
+      <button id="adminPwToggle" type="button" style="position:absolute;right:10px;top:50%;transform:translateY(-60%);background:none;border:0;color:var(--muted);cursor:pointer;font-size:15px">👁</button>
+    </div>
+    <p id="adminErr" style="font-size:12px;color:var(--danger);margin-bottom:8px;display:none">비밀번호가 틀렸어요.</p>
+    <button class="dangerbtn" id="adminConfirmBtn" style="width:100%;justify-content:center;padding:11px 0;margin-top:4px">삭제 확인</button>
   </div>
 </div>
 
@@ -492,8 +514,9 @@ async function openGuide(id){
   currentGuide=guides.find(g=>g.id===id);
   if(!currentGuide)return;
   setViewMode("read");   // 항상 읽기(보기) 모드로 시작
-  document.getElementById("gridView").hidden=true;
-  document.getElementById("detailView").hidden=false;
+  document.getElementById("gridView").classList.add("hidden-view");
+  document.getElementById("detailView").classList.add("active-view");
+  document.getElementById("detailView").classList.remove("hidden-view");
   window.scrollTo(0,0);
   setSaveIndicator("불러오는 중…","saving");
   let content=await loadJSON("guide:"+id+":content",true);
@@ -503,8 +526,9 @@ async function openGuide(id){
   setSaveIndicator("모두 저장됨","saved");
 }
 function backToGrid(){
-  document.getElementById("detailView").hidden=true;
-  document.getElementById("gridView").hidden=false;
+  document.getElementById("detailView").classList.remove("active-view");
+  document.getElementById("detailView").classList.add("hidden-view");
+  document.getElementById("gridView").classList.remove("hidden-view");
   document.getElementById("emojiPop").hidden=true;
   currentGuide=null; currentContent=null;
   renderGrid();
@@ -770,15 +794,58 @@ document.addEventListener("click",e=>{
   if(!pop.hidden&&!pop.contains(e.target)&&e.target.id!=="iconBtn")pop.hidden=true;
 });
 
-document.getElementById("deleteGuideBtn").onclick=async()=>{
-  if(!currentGuide)return;
-  if(!confirm('"'+currentGuide.title+'" 가이드를 삭제할까요? 되돌릴 수 없어요.'))return;
-  const id=currentGuide.id;
+/* ── 관리자 비밀번호 확인 후 삭제 ── */
+const ADMIN_PW="Eckrgkstkfka8*";
+let pendingDeleteId=null;
+
+function openAdminModal(){
+  document.getElementById("adminPw").value="";
+  document.getElementById("adminErr").style.display="none";
+  document.getElementById("adminModal").classList.add("show");
+  setTimeout(()=>document.getElementById("adminPw").focus(),50);
+}
+function closeAdminModal(){
+  document.getElementById("adminModal").classList.remove("show");
+  pendingDeleteId=null;
+}
+document.getElementById("adminClose").onclick=closeAdminModal;
+document.getElementById("adminModal").onclick=e=>{if(e.target.id==="adminModal")closeAdminModal();};
+
+/* 비밀번호 보이기/숨기기 토글 */
+document.getElementById("adminPwToggle").onclick=()=>{
+  const inp=document.getElementById("adminPw");
+  const btn=document.getElementById("adminPwToggle");
+  if(inp.type==="password"){inp.type="text";btn.textContent="🙈";}
+  else{inp.type="password";btn.textContent="👁";}
+};
+
+/* 비밀번호 입력 중 Enter 키 */
+document.getElementById("adminPw").addEventListener("keydown",e=>{
+  if(e.key==="Enter")document.getElementById("adminConfirmBtn").click();
+});
+
+document.getElementById("adminConfirmBtn").onclick=async()=>{
+  const pw=document.getElementById("adminPw").value;
+  if(pw!==ADMIN_PW){
+    document.getElementById("adminErr").style.display="block";
+    document.getElementById("adminPw").value="";
+    document.getElementById("adminPw").focus();
+    return;
+  }
+  const id=pendingDeleteId;  // 닫기 전에 먼저 id 저장
+  closeAdminModal();
+  if(!id)return;
   guides=guides.filter(g=>g.id!==id);
   await saveJSON("guides:list",guides,true);
   await storage.delete("guide:"+id+":content",true);
   backToGrid();
   toast("가이드를 삭제했어요.");
+};
+
+document.getElementById("deleteGuideBtn").onclick=()=>{
+  if(!currentGuide)return;
+  pendingDeleteId=currentGuide.id;
+  openAdminModal();
 };
 
 /* ── 저장 ── */
@@ -820,7 +887,7 @@ function closeLightbox(){document.getElementById("lightbox").classList.remove("s
 document.getElementById("lbClose").onclick=closeLightbox;
 document.getElementById("lightbox").onclick=e=>{if(e.target.id==="lightbox")closeLightbox();};
 document.addEventListener("keydown",e=>{
-  if(e.key==="Escape"){closeLightbox();closeNewGuideModal();}
+  if(e.key==="Escape"){closeLightbox();closeNewGuideModal();closeAdminModal();}
 });
 
 init();
