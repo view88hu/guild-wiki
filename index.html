@@ -198,10 +198,37 @@
   .blk-caption:focus{color:var(--tx)}
   .blk-caption::placeholder{color:var(--dim)}
 
+  /* ── 이미지 그리드 (편집 모드) ── */
+  .img-group-blk{position:relative;border:1px solid var(--line);border-radius:14px;background:var(--panel2);padding:12px}
+  .img-group-blk .blk-ctrl{position:absolute;top:8px;right:8px;display:flex;gap:5px;opacity:0;transition:.15s}
+  .img-group-blk:hover .blk-ctrl,.img-group-blk:focus-within .blk-ctrl{opacity:1}
+  .img-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+  .img-grid-item{position:relative;aspect-ratio:1;border-radius:7px;overflow:hidden;cursor:zoom-in;background:var(--raised)}
+  .img-grid-item img{width:100%;height:100%;object-fit:cover;display:block;transition:.15s}
+  .img-grid-item:hover img{opacity:.82}
+  .img-grid-item .del-img{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:5px;
+    background:rgba(10,15,28,.75);border:1px solid rgba(255,94,126,.5);color:var(--danger);
+    font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    opacity:0;transition:.12s;line-height:1}
+  .img-grid-item:hover .del-img{opacity:1}
+  .img-grid-add{aspect-ratio:1;border-radius:7px;border:1px dashed var(--line2);background:transparent;
+    color:var(--dim);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.14s}
+  .img-grid-add:hover{border-color:var(--brand2);color:var(--brand2);background:rgba(70,224,196,.06)}
+  .img-group-caption{width:100%;background:transparent;border:0;border-top:1px dashed var(--line2);
+    color:var(--muted);font-size:12.5px;padding:8px 4px 0;margin-top:10px;outline:none;text-align:center}
+  .img-group-caption:focus{color:var(--tx)}
+  .img-group-caption::placeholder{color:var(--dim)}
+
   /* ── 게시글(보기) 모드 ── */
   .read-text{font-size:15px;line-height:1.85;color:var(--tx);white-space:pre-wrap;word-break:break-word}
   .read-fig{margin:0;display:flex;flex-direction:column;align-items:center;gap:9px}
   .read-cap{font-size:12.5px;color:var(--muted);text-align:center;line-height:1.5}
+  .read-img-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+  .read-img-grid-item{aspect-ratio:1;border-radius:7px;overflow:hidden;cursor:zoom-in;background:var(--raised)}
+  .read-img-grid-item img{width:100%;height:100%;object-fit:cover;display:block;transition:.15s}
+  .read-img-grid.single .read-img-grid-item{aspect-ratio:auto}
+  .read-img-grid.single .read-img-grid-item img{object-fit:contain;max-height:560px}
+  .read-img-grid-item img:hover{opacity:.82}
   #detailView.reading .detail-toolbar,
   #detailView.reading .blk-ctrl,
   #detailView.reading #blocksEmpty{display:none!important}
@@ -455,6 +482,15 @@ function compressImage(file,maxW,quality){
   });
 }
 function autoGrow(ta){ta.style.height="auto"; ta.style.height=ta.scrollHeight+"px";}
+/* 이미지 개수에 따른 그리드 열 수 (1장이면 크게, 많아지면 촘촘하게) */
+function gridColsFor(n){
+  if(n<=1)return 1;
+  if(n===2)return 2;
+  if(n<=4)return 2;
+  if(n<=6)return 3;
+  if(n<=9)return 3;
+  return 4;
+}
 
 /* ── 상태 ── */
 let guides=[];
@@ -610,85 +646,189 @@ function renderBlocks(){
   const order=currentContent.blocksOrder;
   document.getElementById("blocksEmpty").hidden=order.length>0||viewMode==="read";
 
-  // 게시글(보기) 모드: 읽기 전용으로 깔끔하게 렌더
+  // ── 보기 모드: 연속 이미지를 8열 그리드로 묶어서 렌더 ──
   if(viewMode==="read"){
-    order.forEach(id=>{
-      const b=currentContent.blocks[id];
-      if(!b)return;
+    let i=0;
+    while(i<order.length){
+      const b=currentContent.blocks[order[i]];
+      if(!b){i++;continue;}
       if(b.type==="text"){
-        if(!b.text||!b.text.trim())return;
-        const p=document.createElement("div");
-        p.className="read-text";
-        p.textContent=b.text;
-        wrap.appendChild(p);
+        if(b.text&&b.text.trim()){
+          const p=document.createElement("div");
+          p.className="read-text"; p.textContent=b.text;
+          wrap.appendChild(p);
+        }
+        i++;
       }else if(b.type==="image"){
+        // 연속된 이미지 블록 수집
+        const imgGroup=[];
+        while(i<order.length&&currentContent.blocks[order[i]]&&currentContent.blocks[order[i]].type==="image"){
+          imgGroup.push(currentContent.blocks[order[i]]);
+          i++;
+        }
         const fig=document.createElement("figure");
         fig.className="read-fig";
-        const img=document.createElement("img");
-        img.className="blk-img sz-"+(b.size||"lg");
-        img.src=b.img; img.alt=b.caption||"스크린샷";
-        img.onclick=()=>openLightbox(b.img);
-        fig.appendChild(img);
-        if(b.caption&&b.caption.trim()){
+        const grid=document.createElement("div");
+        grid.className="read-img-grid";
+        const cols=gridColsFor(imgGroup.length);
+        grid.style.gridTemplateColumns="repeat("+cols+",1fr)";
+        if(imgGroup.length===1){grid.classList.add("single");grid.style.maxWidth="640px";}
+        else if(cols===2)grid.style.maxWidth="560px";
+        grid.style.margin="0 auto";
+        imgGroup.forEach(imgBlock=>{
+          const item=document.createElement("div");
+          item.className="read-img-grid-item";
+          const im=document.createElement("img");
+          im.src=imgBlock.img; im.alt=imgBlock.caption||"스크린샷";
+          im.onclick=()=>openLightbox(imgBlock.img);
+          item.appendChild(im); grid.appendChild(item);
+        });
+        fig.appendChild(grid);
+        // 마지막 이미지의 캡션만 대표로 표시
+        const lastCap=imgGroup[imgGroup.length-1].caption;
+        if(lastCap&&lastCap.trim()){
           const cap=document.createElement("figcaption");
-          cap.className="read-cap"; cap.textContent=b.caption;
+          cap.className="read-cap"; cap.textContent=lastCap;
           fig.appendChild(cap);
         }
         wrap.appendChild(fig);
-      }
-    });
+      }else{i++;}
+    }
     return;
   }
 
-  // 편집 모드
-  order.forEach((id,idx)=>{
-    const b=currentContent.blocks[id];
-    if(!b)return;
-    const el=document.createElement("div");
-    el.className="blk";
-    const ctrl='<div class="blk-ctrl">'+
-      (idx>0?'<button type="button" class="blk-btn" data-act="up" title="위로">▲</button>':"")+
-      (idx<order.length-1?'<button type="button" class="blk-btn" data-act="down" title="아래로">▼</button>':"")+
-      '<button type="button" class="blk-btn danger" data-act="del" title="삭제">🗑</button></div>';
+  // ── 편집 모드: 연속 이미지를 하나의 img-group-blk 로 묶어서 렌더 ──
+  // 먼저 [텍스트 | 이미지묶음] 단위로 그룹화
+  const renderGroups=[];
+  let gi=0;
+  while(gi<order.length){
+    const b=currentContent.blocks[order[gi]];
+    if(!b){gi++;continue;}
     if(b.type==="text"){
-      el.innerHTML=ctrl+'<textarea class="blk-text" placeholder="내용을 입력하세요…">'+esc(b.text||"")+'</textarea>';
+      renderGroups.push({type:"text",id:order[gi],block:b,idx:gi});
+      gi++;
+    }else if(b.type==="image"){
+      const ids=[], blocks=[];
+      while(gi<order.length&&currentContent.blocks[order[gi]]&&currentContent.blocks[order[gi]].type==="image"){
+        ids.push(order[gi]); blocks.push(currentContent.blocks[order[gi]]); gi++;
+      }
+      renderGroups.push({type:"imageGroup",ids,blocks});
+    }else{gi++;}
+  }
+
+  renderGroups.forEach((grp,grpIdx)=>{
+    if(grp.type==="text"){
+      const el=document.createElement("div");
+      el.className="blk";
+      const idx=grp.idx;
+      const ctrl='<div class="blk-ctrl">'+
+        (idx>0?'<button type="button" class="blk-btn" data-act="up" title="위로">▲</button>':"")+
+        (idx<order.length-1?'<button type="button" class="blk-btn" data-act="down" title="아래로">▼</button>':"")+
+        '<button type="button" class="blk-btn danger" data-act="del" title="삭제">🗑</button></div>';
+      el.innerHTML=ctrl+'<textarea class="blk-text" placeholder="내용을 입력하세요…">'+esc(grp.block.text||"")+'</textarea>';
       const ta=el.querySelector(".blk-text");
       autoGrow(ta);
-      ta.oninput=()=>{b.text=ta.value;autoGrow(ta);updateCapHint();scheduleSave();};
-    }else if(b.type==="image"){
-      const sz=b.size||"lg";
-      const sizeBar='<div class="img-sizebar"><span class="szlabel">크기</span>'+
-        '<button type="button" data-size="sm" class="'+(sz==="sm"?"on":"")+'">S</button>'+
-        '<button type="button" data-size="md" class="'+(sz==="md"?"on":"")+'">M</button>'+
-        '<button type="button" data-size="lg" class="'+(sz==="lg"?"on":"")+'">L</button>'+
-        '<button type="button" data-size="full" class="'+(sz==="full"?"on":"")+'">꽉</button></div>';
-      el.innerHTML=ctrl+
-        '<img class="blk-img sz-'+sz+'" src="'+b.img+'" alt="'+esc(b.caption||"스크린샷")+'">'+
-        sizeBar+
-        '<input class="blk-caption" placeholder="스크린샷 설명 (선택)" value="'+esc(b.caption||"")+'">';
-      const img=el.querySelector(".blk-img");
-      img.onclick=()=>openLightbox(b.img);
-      el.querySelector(".blk-caption").oninput=e=>{b.caption=e.target.value;scheduleSave();};
-      // 사이즈 조절
-      const bar=el.querySelector(".img-sizebar");
-      bar.querySelectorAll("button").forEach(btn=>{
+      ta.oninput=()=>{grp.block.text=ta.value;autoGrow(ta);updateCapHint();scheduleSave();};
+      el.querySelectorAll(".blk-ctrl .blk-btn").forEach(btn=>{
         btn.onclick=()=>{
-          b.size=btn.dataset.size;
-          img.className="blk-img sz-"+b.size;
-          bar.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===btn));
-          scheduleSave();
+          const act=btn.dataset.act;
+          if(act==="up")moveBlock(grp.id,-1);
+          else if(act==="down")moveBlock(grp.id,1);
+          else if(act==="del")deleteBlock(grp.id);
         };
       });
-    }
-    el.querySelectorAll(".blk-ctrl .blk-btn").forEach(btn=>{
-      btn.onclick=()=>{
-        const act=btn.dataset.act;
-        if(act==="up")moveBlock(id,-1);
-        else if(act==="down")moveBlock(id,1);
-        else if(act==="del")deleteBlock(id);
+      wrap.appendChild(el);
+    }else if(grp.type==="imageGroup"){
+      const el=document.createElement("div");
+      el.className="img-group-blk";
+
+      // 그룹 제어 버튼
+      const ctrl=document.createElement("div");
+      ctrl.className="blk-ctrl";
+      const delAllBtn=document.createElement("button");
+      delAllBtn.type="button"; delAllBtn.className="blk-btn danger";
+      delAllBtn.title="그룹 전체 삭제"; delAllBtn.textContent="🗑";
+      delAllBtn.onclick=()=>{
+        if(!confirm("이 스크린샷 묶음을 모두 삭제할까요?"))return;
+        grp.ids.forEach(id=>{
+          currentContent.blocksOrder=currentContent.blocksOrder.filter(x=>x!==id);
+          delete currentContent.blocks[id];
+        });
+        renderBlocks(); updateCapHint(); scheduleSave();
       };
-    });
-    wrap.appendChild(el);
+      ctrl.appendChild(delAllBtn);
+      el.appendChild(ctrl);
+
+      // 이미지 그리드
+      const grid=document.createElement("div");
+      grid.className="img-grid";
+
+      const renderGridItems=()=>{
+        grid.innerHTML="";
+        const cols=gridColsFor(grp.ids.length+1); // +버튼 한 칸도 포함해서 레이아웃 계산
+        grid.style.gridTemplateColumns="repeat("+cols+",1fr)";
+        grid.style.maxWidth=cols<=2?"420px":(cols===3?"620px":"");
+        grp.ids.forEach((imgId,ii)=>{
+          const imgBlock=currentContent.blocks[imgId];
+          if(!imgBlock)return;
+          const item=document.createElement("div");
+          item.className="img-grid-item";
+          const im=document.createElement("img");
+          im.src=imgBlock.img; im.alt=imgBlock.caption||"스크린샷";
+          im.onclick=()=>openLightbox(imgBlock.img);
+          // 개별 삭제 버튼
+          const delBtn=document.createElement("button");
+          delBtn.type="button"; delBtn.className="del-img"; delBtn.title="이 이미지 삭제"; delBtn.textContent="✕";
+          delBtn.onclick=e=>{
+            e.stopPropagation();
+            currentContent.blocksOrder=currentContent.blocksOrder.filter(x=>x!==imgId);
+            delete currentContent.blocks[imgId];
+            renderBlocks(); updateCapHint(); scheduleSave();
+          };
+          item.appendChild(im); item.appendChild(delBtn); grid.appendChild(item);
+        });
+        // + 추가 버튼
+        const addBtn=document.createElement("button");
+        addBtn.type="button"; addBtn.className="img-grid-add"; addBtn.title="스크린샷 추가"; addBtn.textContent="+";
+        addBtn.onclick=()=>{
+          // 파일 선택 후 이 그룹 바로 뒤에 삽입
+          const fi=document.createElement("input");
+          fi.type="file"; fi.accept="image/*"; fi.multiple=true;
+          fi.onchange=async()=>{
+            const files=[...fi.files].filter(f=>f.type.startsWith("image/"));
+            for(const f of files){
+              try{
+                const dataUrl=await compressImage(f);
+                if(contentSize()+dataUrl.length>4.5*1024*1024){toast("저장 용량이 가득 찼어요.","err");break;}
+                const nid=uid();
+                // 이 그룹의 마지막 id 다음 위치에 삽입
+                const lastIdx=currentContent.blocksOrder.indexOf(grp.ids[grp.ids.length-1]);
+                currentContent.blocksOrder.splice(lastIdx+1,0,nid);
+                currentContent.blocks[nid]={type:"image",img:dataUrl,caption:"",size:"lg"};
+                grp.ids.push(nid); grp.blocks.push(currentContent.blocks[nid]);
+              }catch(e){toast("이미지를 처리하지 못했어요.","err");}
+            }
+            renderGridItems(); updateCapHint(); scheduleSave();
+          };
+          fi.click();
+        };
+        grid.appendChild(addBtn);
+      };
+      renderGridItems();
+      el.appendChild(grid);
+
+      // 대표 캡션 (첫 번째 이미지의 caption 사용)
+      const capInp=document.createElement("input");
+      capInp.className="img-group-caption";
+      capInp.placeholder="스크린샷 묶음 설명 (선택)";
+      capInp.value=grp.blocks[0]?grp.blocks[0].caption||"":"";
+      capInp.oninput=e=>{
+        if(grp.blocks[0])grp.blocks[0].caption=e.target.value;
+        scheduleSave();
+      };
+      el.appendChild(capInp);
+      wrap.appendChild(el);
+    }
   });
 }
 function moveBlock(id,dir){
