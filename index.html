@@ -233,6 +233,10 @@
     .search{width:100%}
   }
 </style>
+
+<!-- 길드원 모두가 같은 글을 보는 공유 게시판을 위한 Firebase(무료) 연동 -->
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -335,21 +339,61 @@
 </div>
 
 <script>
+/* ── Firebase 설정: 아래 6개 값을 본인 Firebase 프로젝트 값으로 바꿔주세요.
+   (Firebase 콘솔 > 프로젝트 설정 > 일반 > "내 앱" 의 SDK 설정값을 그대로 복사) ── */
+const firebaseConfig = {
+  apiKey: "AIzaSyC39L4wQKr1NyrOWaUHoiyOnaDX59-rHaA",
+  authDomain: "guild-wiki.firebaseapp.com",
+  databaseURL: "https://guild-wiki-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "guild-wiki",
+  storageBucket: "guild-wiki.firebasestorage.app",
+  messagingSenderId: "606700314584",
+  appId: "1:606700314584:web:f9a2bebfc66a44be449cad"
+};
+const firebaseReady = firebaseConfig.apiKey!=="YOUR_API_KEY";
+let fbdb=null;
+if(firebaseReady){
+  try{ firebase.initializeApp(firebaseConfig); fbdb=firebase.database(); }
+  catch(e){ console.error("Firebase 초기화 실패:",e); }
+}
+
 /* ── 저장소 래퍼: Claude 미리보기에서는 window.storage(영구 저장),
-   그 외 환경(파일로 직접 열었을 때)에서는 메모리 저장(새로고침 시 초기화)으로 자동 대체 ── */
+   GitHub 등 일반 호스팅에서는 Firebase Realtime Database(모두가 같은 글을 보는 공유 저장소)로 저장.
+   firebaseConfig를 채우지 않으면 메모리 저장(새로고침 시 초기화)으로만 동작해요. ── */
 const memStore={};
+let warnedNoFirebase=false;
 const storage={
   async get(key,shared){
     if(window.storage){ try{return await window.storage.get(key,shared);}catch(e){return null;} }
+    if(fbdb){
+      try{
+        const snap=await fbdb.ref("board/"+encodeURIComponent(key)).get();
+        return snap.exists()?{key,value:snap.val(),shared}:null;
+      }catch(e){ console.error("Firebase 읽기 실패:",e); return null; }
+    }
+    if(!warnedNoFirebase){warnedNoFirebase=true;console.warn("Firebase가 설정되지 않아 새로고침하면 글이 사라져요. firebaseConfig를 채워주세요.");}
     const k=(shared?"s:":"p:")+key;
     return Object.prototype.hasOwnProperty.call(memStore,k)?{key,value:memStore[k],shared}:null;
   },
   async set(key,value,shared){
     if(window.storage){ try{return await window.storage.set(key,value,shared);}catch(e){return null;} }
+    if(fbdb){
+      try{
+        await fbdb.ref("board/"+encodeURIComponent(key)).set(value);
+        return {key,value,shared};
+      }catch(e){ console.error("Firebase 쓰기 실패:",e); return null; }
+    }
+    if(!warnedNoFirebase){warnedNoFirebase=true;console.warn("Firebase가 설정되지 않아 새로고침하면 글이 사라져요. firebaseConfig를 채워주세요.");}
     const k=(shared?"s:":"p:")+key; memStore[k]=value; return {key,value,shared};
   },
   async delete(key,shared){
     if(window.storage){ try{return await window.storage.delete(key,shared);}catch(e){return null;} }
+    if(fbdb){
+      try{
+        await fbdb.ref("board/"+encodeURIComponent(key)).remove();
+        return {key,deleted:true,shared};
+      }catch(e){ console.error("Firebase 삭제 실패:",e); return null; }
+    }
     const k=(shared?"s:":"p:")+key; delete memStore[k]; return {key,deleted:true,shared};
   }
 };
