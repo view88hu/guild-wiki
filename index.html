@@ -229,12 +229,12 @@
     border:1px solid var(--line2);box-shadow:0 8px 20px -14px rgba(0,0,0,.7);transition:.15s}
   .read-img-grid-item:hover{border-color:var(--brand2)}
   .read-img-grid-item img{display:block;width:auto;height:auto;max-width:100%;
-    max-height:var(--gal-h,220px);object-fit:contain;transition:.15s}
+    max-height:var(--gal-h,260px);object-fit:contain;transition:.15s}
   .read-img-grid.single .read-img-grid-item{border:none;background:transparent;box-shadow:none}
   .read-img-grid.single .read-img-grid-item img{max-height:560px}
   .read-img-grid-item img:hover{opacity:.88}
   @media(max-width:640px){
-    .read-img-grid-item img{max-height:min(180px,var(--gal-h,180px))}
+    .read-img-grid-item img{max-height:min(220px,var(--gal-h,220px))}
     .read-img-grid.single .read-img-grid-item img{max-height:380px}
   }
   #detailView.reading .detail-toolbar,
@@ -698,7 +698,7 @@ function renderBlocks(){
         fig.className="read-fig";
         const grid=document.createElement("div");
         grid.className="read-img-grid"+(imgGroup.length===1?" single":"");
-        const galH=imgGroup.length<=2?260:(imgGroup.length<=4?210:170);
+        const galH=imgGroup.length<=2?340:(imgGroup.length<=4?260:200);
         grid.style.setProperty("--gal-h",galH+"px");
         imgGroup.forEach(imgBlock=>{
           const item=document.createElement("div");
