@@ -59,10 +59,7 @@
   .search input{width:100%;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);font-size:13px;
     border-radius:9px;padding:9px 12px 9px 32px;outline:none}
   .search input:focus{border-color:var(--brand2)}
-  .search input::placeholder{color:var(--dim);opacity:.6}
   .search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:.5}
-  .post-row.hidden{display:none}
-  .search-info{font-size:12px;color:var(--dim);padding:12px 22px;margin-top:-1px}
 
   /* ── 게시판(목록) ── */
   .board-wrap{display:block}
@@ -170,15 +167,6 @@
   .tbtn{display:inline-flex;align-items:center;gap:6px;background:var(--raised);border:1px solid var(--line2);color:var(--tx);
     font-size:13px;font-weight:700;border-radius:9px;padding:8px 13px;cursor:pointer;transition:.15s}
   .tbtn:hover{border-color:var(--brand2);background:var(--panel2)}
-  .detail-search{display:inline-flex;align-items:center;gap:6px;background:var(--raised);border:1px solid var(--line2);
-    border-radius:9px;padding:0 8px;cursor:text}
-  .detail-search input{background:transparent;border:0;color:var(--tx);font-size:13px;padding:8px 5px;
-    outline:none;width:140px}
-  .detail-search input::placeholder{color:var(--dim);opacity:.6}
-  .detail-search:focus-within{border-color:var(--brand2)}
-  .detail-search-counter{font-size:11px;color:var(--dim);white-space:nowrap;margin-left:4px}
-  .detail-search-counter.active{color:var(--brand2);font-weight:700}
-  .highlight-search{background-color:rgba(108,140,255,.35);color:var(--tx)}
   .cap-hint{margin-left:auto;font-size:11.5px;color:var(--dim)}
   .cap-hint.warn{color:var(--danger);font-weight:700}
   .paste-hint{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--dim);font-weight:600}
@@ -368,10 +356,6 @@
       <input type="file" id="fileInput" accept="image/*" multiple hidden>
       <span class="paste-hint"><kbd>Ctrl</kbd>+<kbd>V</kbd> 붙여넣기 · 드래그&드롭 가능</span>
       <span class="cap-hint" id="capHint"></span>
-      <div class="detail-search" style="margin-left:auto" id="detailSearchBox">
-        <input type="text" id="detailSearchInput" placeholder="내용 검색...">
-        <span class="detail-search-counter" id="detailSearchCounter"></span>
-      </div>
     </div>
     <div class="blocks-wrap" id="blocksWrap"></div>
     <div class="empty-state" id="blocksEmpty" hidden>
@@ -912,11 +896,6 @@ function setViewMode(m){
   const btn=document.getElementById("viewToggleBtn");
   if(btn)btn.textContent=(m==="read")?"✏️ 편집하기":"👁 게시글 보기";
   renderLockBadgeDetail();
-  // 검색 박스 표시/숨기기
-  const detailSearchBox=document.getElementById("detailSearchBox");
-  if(detailSearchBox){
-    detailSearchBox.style.display=(m==="read")?"flex":"none";
-  }
 }
 
 function renderDetail(){
@@ -1606,167 +1585,9 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){closeLightbox();closeNewGuideModal();closeAdminModal();}
 });
 
-/* ── 검색 기능 ── */
-const searchInput = document.querySelector('.search input');
-if(searchInput){
-  searchInput.setAttribute('placeholder', '이름으로 검색...');
-  searchInput.addEventListener('input', function(){
-    const query = this.value.toLowerCase().trim();
-    const boardRows = document.querySelectorAll('.board .post-row');
-    let visibleCount = 0;
-    
-    boardRows.forEach(row => {
-      const titleText = row.querySelector('.post-title')?.textContent || '';
-      const descText = row.querySelector('.post-desc')?.textContent || '';
-      const searchText = (titleText + ' ' + descText).toLowerCase();
-      
-      if(query === '' || searchText.includes(query)){
-        row.classList.remove('hidden');
-        visibleCount++;
-      } else {
-        row.classList.add('hidden');
-      }
-    });
-    
-    // 검색 결과 정보 표시
-    const board = document.querySelector('.board');
-    let infoEl = board?.parentElement.querySelector('.search-info');
-    
-    if(query !== ''){
-      if(!infoEl){
-        infoEl = document.createElement('div');
-        infoEl.className = 'search-info';
-        board.parentElement.appendChild(infoEl);
-      }
-      infoEl.textContent = visibleCount > 0 
-        ? `${visibleCount}명 찾음` 
-        : '검색 결과가 없습니다.';
-      infoEl.style.display = 'block';
-    } else if(infoEl){
-      infoEl.style.display = 'none';
-    }
-  });
-}
+init();
 
-/* ── 게시글 상세보기 내 검색 기능 ── */
-const detailSearchInput = document.getElementById('detailSearchInput');
-const detailSearchBox = document.getElementById('detailSearchBox');
-const detailSearchCounter = document.getElementById('detailSearchCounter');
-let currentSearchMatches = [];
-let currentSearchIndex = 0;
-
-function clearDetailSearch(){
-  document.querySelectorAll('.highlight-search').forEach(el => {
-    const parent = el.parentNode;
-    while(el.firstChild) parent.insertBefore(el.firstChild, el);
-    parent.removeChild(el);
-  });
-  currentSearchMatches = [];
-  currentSearchIndex = 0;
-}
-
-function highlightSearchText(searchQuery){
-  if(!searchQuery.trim()) {
-    clearDetailSearch();
-    detailSearchCounter.textContent = '';
-    return;
-  }
-  
-  clearDetailSearch();
-  
-  const blocksWrap = document.getElementById('blocksWrap');
-  const query = searchQuery.toLowerCase();
-  const walker = document.createTreeWalker(
-    blocksWrap,
-    NodeFilter.SHOW_TEXT,
-    null,
-    false
-  );
-  
-  let node;
-  const nodesToProcess = [];
-  while(node = walker.nextNode()) {
-    if(node.textContent.toLowerCase().includes(query)) {
-      nodesToProcess.push(node);
-    }
-  }
-  
-  nodesToProcess.forEach(textNode => {
-    const text = textNode.textContent;
-    const lowerText = text.toLowerCase();
-    let lastIndex = 0;
-    let matchCount = 0;
-    const fragment = document.createDocumentFragment();
-    
-    let index = lowerText.indexOf(query);
-    while(index !== -1) {
-      if(index > lastIndex) {
-        fragment.appendChild(document.createTextNode(text.substring(lastIndex, index)));
-      }
-      
-      const highlightSpan = document.createElement('span');
-      highlightSpan.className = 'highlight-search';
-      highlightSpan.textContent = text.substring(index, index + query.length);
-      fragment.appendChild(highlightSpan);
-      currentSearchMatches.push(highlightSpan);
-      
-      matchCount++;
-      lastIndex = index + query.length;
-      index = lowerText.indexOf(query, lastIndex);
-    }
-    
-    if(lastIndex < text.length) {
-      fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
-    }
-    
-    textNode.parentNode.replaceChild(fragment, textNode);
-  });
-  
-  detailSearchCounter.textContent = currentSearchMatches.length > 0 
-    ? `${currentSearchMatches.length}개 찾음`
-    : '결과 없음';
-  
-  detailSearchCounter.classList.toggle('active', currentSearchMatches.length > 0);
-  
-  if(currentSearchMatches.length > 0) {
-    currentSearchIndex = 0;
-    scrollToMatch(0);
-  }
-}
-
-function scrollToMatch(index){
-  if(currentSearchMatches.length === 0) return;
-  const match = currentSearchMatches[index];
-  match.scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-
-detailSearchInput?.addEventListener('input', function(){
-  highlightSearchText(this.value);
-});
-
-detailSearchInput?.addEventListener('keydown', function(e){
-  if(e.key === 'Enter') {
-    e.preventDefault();
-    if(currentSearchMatches.length > 0) {
-      currentSearchIndex = (currentSearchIndex + 1) % currentSearchMatches.length;
-      scrollToMatch(currentSearchIndex);
-    }
-  }
-  if(e.key === 'Escape') {
-    clearDetailSearch();
-    detailSearchInput.value = '';
-    detailSearchCounter.textContent = '';
-    detailSearchBox.hidden = true;
-  }
-});
-
-// 키보드 단축키: Ctrl+F 또는 Cmd+F로 검색 시작
-document.addEventListener('keydown', function(e){
-  if((e.ctrlKey || e.metaKey) && e.key === 'f' && !detailSearchBox.hidden) {
-    e.preventDefault();
-    detailSearchInput.focus();
-  }
-}
+/* ── 상세 화면 상단 바 높이를 추적해 .detail-toolbar가 그 아래에 고정되도록 동기화 ── */
 (function syncDetailTopHeight(){
   const top=document.querySelector(".detail-top");
   if(!top) return;
