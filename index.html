@@ -152,7 +152,9 @@
     padding:8px;display:grid;grid-template-columns:repeat(6,1fr);gap:4px;box-shadow:0 14px 30px -10px rgba(0,0,0,.6);z-index:10}
   .emoji-pop[hidden]{display:none}
 
-  .detail-toolbar{display:flex;align-items:center;gap:8px;margin:14px auto 18px;flex-wrap:wrap;max-width:860px}
+  .detail-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:860px;
+    position:sticky;top:var(--detail-top-h,52px);z-index:4;background:var(--bg);
+    margin:14px auto 0;padding:8px 0 18px;border-bottom:1px solid var(--line)}
   .tbtn{display:inline-flex;align-items:center;gap:6px;background:var(--raised);border:1px solid var(--line2);color:var(--tx);
     font-size:13px;font-weight:700;border-radius:9px;padding:8px 13px;cursor:pointer;transition:.15s}
   .tbtn:hover{border-color:var(--brand2);background:var(--panel2)}
@@ -1302,6 +1304,19 @@ document.addEventListener("keydown",e=>{
 });
 
 init();
+
+/* ── 상세 화면 상단 바 높이를 추적해 .detail-toolbar가 그 아래에 고정되도록 동기화 ── */
+(function syncDetailTopHeight(){
+  const top=document.querySelector(".detail-top");
+  if(!top) return;
+  const apply=()=>document.documentElement.style.setProperty("--detail-top-h", top.offsetHeight+"px");
+  apply();
+  if(typeof ResizeObserver!=="undefined"){
+    new ResizeObserver(apply).observe(top);
+  }else{
+    window.addEventListener("resize", apply);
+  }
+})();
 </script>
 </body>
 </html>
