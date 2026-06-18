@@ -252,7 +252,24 @@
     box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 16px 40px -28px rgba(0,0,0,.75)}
   #detailView.reading .detail-head{max-width:760px;margin-bottom:18px}
 
-  /* ── toast ── */
+  /* ── 표 보기 모드 ── */
+  .read-table-wrap{width:100%;overflow-x:auto}
+  .read-table{width:100%;border-collapse:collapse;font-size:14px}
+  .read-table th{background:var(--raised);color:var(--brand2);font-size:12px;font-weight:700;
+    padding:8px 14px;border:1px solid var(--line2);text-align:center;letter-spacing:.04em;white-space:nowrap}
+  .read-table td{padding:8px 14px;border:1px solid var(--line2);color:var(--tx);
+    font-size:13.5px;line-height:1.6;word-break:break-all}
+  .read-table td:first-child{width:52px;min-width:52px;text-align:center;white-space:nowrap}
+  .read-table tr:nth-child(even) td{background:rgba(255,255,255,.025)}
+  .read-table tr:hover td{background:rgba(108,140,255,.08)}
+  .edit-table-wrap{width:100%;overflow-x:auto;margin-top:6px}
+  .edit-table input.edit-row-input:focus{background:rgba(108,140,255,.08)!important;border-radius:4px}
+  .edit-add-row-btn{margin-top:8px;width:100%;background:var(--raised);border:1px dashed var(--line2);
+    color:var(--muted);font-size:13px;font-weight:700;border-radius:8px;padding:8px;cursor:pointer;transition:.15s}
+  .edit-add-row-btn:hover{border-color:var(--brand2);color:var(--brand2)}
+    border:1px solid var(--line2);color:var(--muted);font-size:12px;font-weight:700;
+    border-radius:8px;padding:5px 12px;cursor:pointer;transition:.15s;margin-bottom:10px}
+  .table-toggle-btn:hover{border-color:var(--brand2);color:var(--brand2)}
   .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--raised);
     border:1px solid var(--line2);color:var(--tx);font-size:13.5px;font-weight:600;padding:12px 20px;border-radius:12px;
     box-shadow:0 12px 30px -8px rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:.3s;z-index:80}
@@ -680,9 +697,50 @@ function renderBlocks(){
       if(!b){i++;continue;}
       if(b.type==="text"){
         if(b.text&&b.text.trim()){
-          const p=document.createElement("div");
-          p.className="read-text"; p.textContent=b.text;
-          wrap.appendChild(p);
+          const lines=b.text.trim().split("\n").filter(l=>l.trim());
+          const container=document.createElement("div");
+
+          // 줄이 5개 이상이면 표 보기 토글 버튼 표시
+          if(lines.length>=5){
+            let isTable=true;
+            const toggleBtn=document.createElement("button");
+            toggleBtn.className="table-toggle-btn";
+            toggleBtn.textContent="📝 목록 형식으로 보기";
+            container.appendChild(toggleBtn);
+
+            const textDiv=document.createElement("div");
+            textDiv.className="read-text"; textDiv.textContent=b.text;
+            textDiv.style.display="none";
+            container.appendChild(textDiv);
+
+            const tableWrap=document.createElement("div");
+            tableWrap.className="read-table-wrap";
+            const table=document.createElement("table");
+            table.className="read-table";
+            const thead=document.createElement("thead");
+            thead.innerHTML='<tr><th>번호</th><th>닉네임</th></tr>';
+            const tbody=document.createElement("tbody");
+            lines.forEach((line,idx)=>{
+              const tr=document.createElement("tr");
+              tr.innerHTML=`<td>${idx+1}</td><td>${line.trim()}</td>`;
+              tbody.appendChild(tr);
+            });
+            table.appendChild(thead); table.appendChild(tbody);
+            tableWrap.appendChild(table);
+            container.appendChild(tableWrap);
+
+            toggleBtn.onclick=()=>{
+              isTable=!isTable;
+              textDiv.style.display=isTable?"none":"";
+              tableWrap.style.display=isTable?"":"none";
+              toggleBtn.textContent=isTable?"📝 목록 형식으로 보기":"📊 표 형식으로 보기";
+            };
+          } else {
+            const p=document.createElement("div");
+            p.className="read-text"; p.textContent=b.text;
+            container.appendChild(p);
+          }
+          wrap.appendChild(container);
         }
         i++;
       }else if(b.type==="image"){
@@ -748,10 +806,54 @@ function renderBlocks(){
         (idx>0?'<button type="button" class="blk-btn" data-act="up" title="위로">▲</button>':"")+
         (idx<order.length-1?'<button type="button" class="blk-btn" data-act="down" title="아래로">▼</button>':"")+
         '<button type="button" class="blk-btn danger" data-act="del" title="삭제">🗑</button></div>';
-      el.innerHTML=ctrl+'<textarea class="blk-text" placeholder="내용을 입력하세요…">'+esc(grp.block.text||"")+'</textarea>';
-      const ta=el.querySelector(".blk-text");
-      autoGrow(ta);
-      ta.oninput=()=>{grp.block.text=ta.value;autoGrow(ta);updateCapHint();scheduleSave();};
+      el.innerHTML=ctrl;
+      el.insertAdjacentHTML("beforeend",`
+        <div class="edit-table-wrap">
+          <table class="read-table edit-table">
+            <thead><tr><th style="width:52px">번호</th><th>닉네임</th><th style="width:36px"></th></tr></thead>
+            <tbody class="edit-tbody"></tbody>
+          </table>
+          <button type="button" class="edit-add-row-btn">+ 줄 추가</button>
+        </div>
+      `);
+
+      const tbody=el.querySelector(".edit-tbody");
+      const addRowBtn=el.querySelector(".edit-add-row-btn");
+
+      function getLines(){return (grp.block.text||"").split("\n").filter(l=>l.trim());}
+      function saveLines(){
+        const inputs=[...tbody.querySelectorAll("input.edit-row-input")];
+        grp.block.text=inputs.map(i=>i.value).join("\n");
+        scheduleSave(); updateCapHint();
+      }
+      function renderRows(){
+        const lines=getLines();
+        tbody.innerHTML="";
+        (lines.length?lines:[""]).forEach((line,i)=>{
+          addRow(line,i);
+        });
+      }
+      function addRow(value,idx){
+        const allRows=[...tbody.querySelectorAll("tr")];
+        const rowNum=(idx!=null?idx:allRows.length)+1;
+        const tr=document.createElement("tr");
+        tr.innerHTML=`
+          <td style="text-align:center;color:var(--dim);white-space:nowrap">${rowNum}</td>
+          <td><input class="edit-row-input" type="text" value="${esc(value||"")}" placeholder="닉네임 입력" style="width:100%;background:transparent;border:none;outline:none;color:var(--tx);font-size:13.5px;padding:2px 4px"></td>
+          <td><button type="button" class="blk-btn danger del-row-btn" style="padding:2px 7px;font-size:11px" title="삭제">✕</button></td>
+        `;
+        tr.querySelector(".edit-row-input").oninput=()=>{saveLines(); renumberRows();};
+        tr.querySelector(".del-row-btn").onclick=()=>{tr.remove(); saveLines(); renumberRows();};
+        tbody.appendChild(tr);
+      }
+      function renumberRows(){
+        tbody.querySelectorAll("tr").forEach((tr,i)=>{
+          tr.querySelector("td:first-child").textContent=i+1;
+        });
+      }
+      addRowBtn.onclick=()=>{addRow("",null); renumberRows(); saveLines(); addRowBtn.previousElementSibling&&addRowBtn.previousElementSibling.querySelector&&tbody.querySelector("tr:last-child input")&&tbody.querySelector("tr:last-child input").focus();};
+      renderRows();
+
       el.querySelectorAll(".blk-ctrl .blk-btn").forEach(btn=>{
         btn.onclick=()=>{
           const act=btn.dataset.act;
@@ -855,7 +957,6 @@ function renderBlocks(){
   });
   // 렌더 후 모든 텍스트 블록 높이 자동 맞춤
   requestAnimationFrame(()=>{
-    document.querySelectorAll(".blk-text").forEach(ta=>autoGrow(ta));
   });
 }
 function moveBlock(id,dir){
@@ -876,8 +977,9 @@ function addTextBlock(){
   currentContent.blocksOrder.push(id);
   currentContent.blocks[id]={type:"text",text:""};
   renderBlocks(); scheduleSave();
-  const tas=document.querySelectorAll(".blk-text");
-  const last=tas[tas.length-1];
+  // 마지막 텍스트 블록의 첫 번째 입력칸에 포커스
+  const inputs=document.querySelectorAll(".edit-row-input");
+  const last=inputs[inputs.length-1];
   if(last)last.focus();
 }
 document.getElementById("addTextBtn").onclick=addTextBlock;
