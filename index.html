@@ -624,20 +624,8 @@ async function openGuide(id,startInEdit){
   let content=await loadJSON("guide:"+id+":content",true);
   if(!content||!content.blocksOrder)content={blocksOrder:[],blocks:{}};
   currentContent=content;
-  // 새로 만든 글(편집 모드로 바로 진입)이고 아직 내용이 비어있다면,
-  // 본문을 바로 입력할 수 있도록 빈 텍스트 블록을 만들어 커서를 둠
-  if(startInEdit&&currentContent.blocksOrder.length===0){
-    const bid=uid();
-    currentContent.blocksOrder.push(bid);
-    currentContent.blocks[bid]={type:"text",text:""};
-  }
   renderDetail();
   setSaveIndicator("모두 저장됨","saved");
-  if(startInEdit){
-    const tas=document.querySelectorAll(".blk-text");
-    const last=tas[tas.length-1];
-    if(last)last.focus();
-  }
 }
 function backToGrid(){
   document.getElementById("detailView").classList.remove("active-view");
