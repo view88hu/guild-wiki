@@ -229,12 +229,12 @@
     border:1px solid var(--line2);box-shadow:0 8px 20px -14px rgba(0,0,0,.7);transition:.15s}
   .read-img-grid-item:hover{border-color:var(--brand2)}
   .read-img-grid-item img{display:block;width:auto;height:auto;max-width:100%;
-    max-height:var(--gal-h,260px);object-fit:contain;transition:.15s}
+    max-height:var(--gal-h,220px);object-fit:contain;transition:.15s}
   .read-img-grid.single .read-img-grid-item{border:none;background:transparent;box-shadow:none}
   .read-img-grid.single .read-img-grid-item img{max-height:560px}
   .read-img-grid-item img:hover{opacity:.88}
   @media(max-width:640px){
-    .read-img-grid-item img{max-height:min(220px,var(--gal-h,220px))}
+    .read-img-grid-item img{max-height:min(180px,var(--gal-h,180px))}
     .read-img-grid.single .read-img-grid-item img{max-height:380px}
   }
   #detailView.reading .detail-toolbar,
@@ -271,6 +271,11 @@
     .detail-head{flex-wrap:wrap}
     .toolbar-row{flex-direction:column;align-items:stretch}
     .search{width:100%}
+  }
+  /* 갤럭시 등 안드로이드 소형 화면: 이름/비번 입력란 세로 배치 */
+  @media(max-width:480px){
+    .modal-input-row{flex-direction:column!important}
+    .modal-input-row input{min-width:0!important;flex:unset!important;width:100%!important}
   }
 </style>
 
@@ -350,9 +355,9 @@
     <div class="emoji-row" id="newGuideEmojiRow"></div>
     <input id="ngTitle" placeholder="가이드 제목 (예: 연구 올리는 방법)" maxlength="40">
     <textarea id="ngDesc" placeholder="한 줄 설명 (선택)" rows="2" maxlength="80"></textarea>
-    <div style="display:flex;gap:8px">
-      <input id="ngAuthor" placeholder="작성자 이름" maxlength="20" style="flex:1">
-      <input id="ngPw" type="password" placeholder="비밀번호 (수정/삭제용)" maxlength="30" style="flex:1">
+    <div class="modal-input-row" style="display:flex;gap:8px;flex-wrap:wrap">
+      <input id="ngAuthor" placeholder="작성자 이름" maxlength="20" style="flex:1;min-width:120px">
+      <input id="ngPw" type="password" placeholder="비밀번호 (수정/삭제용)" maxlength="30" style="flex:1;min-width:120px">
     </div>
     <p style="font-size:11.5px;color:var(--dim);margin:-2px 0 10px;line-height:1.5">이 비밀번호로 나중에 수정·삭제할 수 있어요. 잊지 않게 기억해두세요.</p>
     <button class="primarybtn" id="ngCreateBtn" style="width:100%;justify-content:center;padding:11px 0">만들기</button>
@@ -698,7 +703,7 @@ function renderBlocks(){
         fig.className="read-fig";
         const grid=document.createElement("div");
         grid.className="read-img-grid"+(imgGroup.length===1?" single":"");
-        const galH=imgGroup.length<=2?340:(imgGroup.length<=4?260:200);
+        const galH=imgGroup.length<=2?260:(imgGroup.length<=4?210:170);
         grid.style.setProperty("--gal-h",galH+"px");
         imgGroup.forEach(imgBlock=>{
           const item=document.createElement("div");
