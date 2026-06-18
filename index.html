@@ -178,7 +178,7 @@
   .blk-btn:hover{border-color:var(--brand2)}
   .blk-btn.danger{color:var(--danger);border-color:rgba(255,94,126,.4)}
   .blk-btn.danger:hover{background:rgba(255,94,126,.12)}
-  .blk-text{width:100%;min-height:54px;background:transparent;border:0;resize:none;overflow:hidden;color:var(--tx);
+  .blk-text{width:100%;min-height:120px;background:transparent;border:0;resize:none;overflow:hidden;color:var(--tx);
     font-size:14.5px;line-height:1.7;outline:none;white-space:pre-wrap}
   .blk-text::placeholder{color:var(--dim)}
   /* 이미지: 기본은 '크게(lg)', 사이즈 클래스로 조절. 화면 꽉 채우지 않음 */
@@ -852,6 +852,10 @@ function renderBlocks(){
       el.appendChild(capInp);
       wrap.appendChild(el);
     }
+  });
+  // 렌더 후 모든 텍스트 블록 높이 자동 맞춤
+  requestAnimationFrame(()=>{
+    document.querySelectorAll(".blk-text").forEach(ta=>autoGrow(ta));
   });
 }
 function moveBlock(id,dir){
