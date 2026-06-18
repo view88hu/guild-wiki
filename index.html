@@ -598,6 +598,10 @@ async function tryAcquireLock(guideId,nickname){
   if(!ok)return {ok:false,owner:existing};
   lockState[guideId]=lock; notifyLockListeners();
   myLockGuideId=guideId;
+  // Firebase 환경에서는 연결이 끊길 때 서버가 자동으로 락을 제거하도록 설정
+  if(fbdb && !window.storage){
+    try{ await fbdb.ref("board/lock/"+encodeURIComponent(guideId)).onDisconnect().remove(); }catch(e){}
+  }
   startHeartbeat(guideId);
   return {ok:true};
 }
@@ -623,7 +627,16 @@ async function releaseLock(guideId){
   if(cur && cur.clientId===CLIENT_ID){ await writeLock(guideId,null); lockState[guideId]=null; notifyLockListeners(); }
   if(myLockGuideId===guideId)myLockGuideId=null;
 }
-window.addEventListener("beforeunload",()=>{ if(myLockGuideId)releaseLock(myLockGuideId); });
+window.addEventListener("beforeunload",()=>{
+  if(!myLockGuideId)return;
+  // 창이 닫힐 때 락을 즉시 동기적으로 해제
+  // Firebase는 onDisconnect()로 서버 측에서 자동 제거, 그 외는 최선 노력으로 제거
+  if(fbdb && !window.storage){
+    try{ fbdb.ref("board/lock/"+encodeURIComponent(myLockGuideId)).remove(); }catch(e){}
+  }else{
+    releaseLock(myLockGuideId);
+  }
+});
 
 
 /* ── 유틸 ── */
@@ -708,7 +721,10 @@ async function init(){
   renderGrid();
   // 목록에 있는 모든 글의 락 상태를 구독해 실시간으로 "편집 중" 배지를 갱신
   guides.forEach(g=>watchLock(g.id));
-  startLockPolling(()=>guides.map(g=>g.id));
+  // Firebase 실시간 구독이 있으면 폴링 불필요, 없을 때만 폴링
+  if(!fbdb || window.storage){
+    startLockPolling(()=>guides.map(g=>g.id));
+  }
   lockListeners.add(()=>{
     // 상세 화면이 열려 있으면 그쪽 배지를, 아니면 목록 배지를 갱신
     if(currentGuide) renderLockBadgeDetail();
@@ -851,6 +867,7 @@ function renderLockBadgeDetail(){
   const lock=getActiveLock(currentGuide.id);
   const badge=document.getElementById("lockBadge");
   const iAmOwner=lock&&lock.clientId===CLIENT_ID;
+  // 내가 편집 중이면 배지 숨김, 남이 편집 중이면 배지 표시
   if(lock&&!iAmOwner){
     badge.hidden=false;
     badge.textContent="🔒 "+lock.nickname+"님 편집 중";
@@ -859,8 +876,11 @@ function renderLockBadgeDetail(){
   }
   const toggleBtn=document.getElementById("viewToggleBtn");
   if(toggleBtn){
-    const blocked=viewMode==="read"&&lock&&!iAmOwner;
-    toggleBtn.classList.toggle("is-locked",!!blocked);
+    // 보기 모드에서 + 내 락이 아닌 다른 사람 락이 있을 때만 비활성화
+    const blocked=viewMode==="read"&&!!lock&&!iAmOwner;
+    toggleBtn.classList.toggle("is-locked",blocked);
+    // pointer-events도 막아서 CSS hover 효과까지 차단
+    toggleBtn.style.pointerEvents=blocked?"none":"";
     toggleBtn.title=blocked?"다른 사람이 편집 중이라 지금은 수정할 수 없어요":"";
   }
 }
@@ -1461,6 +1481,12 @@ document.getElementById("nickConfirmBtn").onclick=()=>{
 
 /* ── 수정(편집 모드 진입): 작성자 본인 비밀번호 또는 관리자 비밀번호 + 락 확인 ── */
 document.getElementById("viewToggleBtn").onclick=async()=>{
+  // 다른 사람이 편집 중이면 클릭 자체를 막음 (CSS만으론 클릭이 통과되므로 여기서도 차단)
+  if(document.getElementById("viewToggleBtn").classList.contains("is-locked")){
+    const lock=getActiveLock(currentGuide&&currentGuide.id);
+    toast((lock?lock.nickname+"님이":"다른 사람이")+" 편집 중이라 지금은 수정할 수 없어요.","err");
+    return;
+  }
   // 편집 모드 → 보기 모드 전환은 비번 없이 자유 (단, 내 락은 풀어줘서 남이 들어올 수 있게 함)
   if(viewMode==="edit"){
     if(currentGuide)await releaseLock(currentGuide.id);
