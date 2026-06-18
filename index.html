@@ -70,7 +70,8 @@
     font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--dim);
     border-bottom:1px solid var(--line);background:rgba(255,255,255,.015)}
   .board-head .h-title{flex:1}
-  .board-head .h-meta{white-space:nowrap}
+  .board-head .h-meta{white-space:nowrap;width:90px;text-align:right}
+  .board-head .h-meta:last-child{margin-left:0}
 
   .post-row{position:relative;display:flex;align-items:center;gap:15px;padding:15px 22px;cursor:pointer;
     border-bottom:1px solid var(--line);transition:background .14s}
@@ -89,7 +90,7 @@
     color:color-mix(in srgb,var(--bar,var(--brand2)) 75%, var(--tx))}
   .post-desc{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.5;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .post-meta{font-size:12px;color:var(--dim);white-space:nowrap;flex-shrink:0;text-align:right}
+  .post-meta{font-size:12px;color:var(--dim);white-space:nowrap;flex-shrink:0;text-align:right;width:90px}
   .post-write{display:flex;align-items:center;justify-content:center;gap:8px;
     padding:15px;cursor:pointer;color:var(--dim);font-weight:700;font-size:13.5px;
     transition:.14s}
@@ -236,6 +237,7 @@
   #detailView.reading .save-indicator{display:none}
   #detailView.reading .detail-title-input{font-size:26px;cursor:default}
   #detailView.reading .detail-desc-input{font-size:13.5px;cursor:default}
+  #detailView.reading #dAuthor{font-size:12.5px}
   #detailView.reading .blocks-wrap{gap:24px;max-width:720px}
   #detailView.reading .detail-head{max-width:720px;margin-bottom:18px}
 
@@ -305,6 +307,7 @@
       <div class="detail-headtext">
         <input class="detail-title-input" id="dTitle" placeholder="가이드 제목">
         <input class="detail-desc-input" id="dDesc" placeholder="한 줄 설명 (선택)">
+        <span id="dAuthor" style="font-size:11.5px;color:var(--dim);font-weight:600"></span>
       </div>
     </div>
     <div class="detail-toolbar">
@@ -336,24 +339,29 @@
     <div class="emoji-row" id="newGuideEmojiRow"></div>
     <input id="ngTitle" placeholder="가이드 제목 (예: 연구 올리는 방법)" maxlength="40">
     <textarea id="ngDesc" placeholder="한 줄 설명 (선택)" rows="2" maxlength="80"></textarea>
+    <div style="display:flex;gap:8px">
+      <input id="ngAuthor" placeholder="작성자 이름" maxlength="20" style="flex:1">
+      <input id="ngPw" type="password" placeholder="비밀번호 (수정/삭제용)" maxlength="30" style="flex:1">
+    </div>
+    <p style="font-size:11.5px;color:var(--dim);margin:-2px 0 10px;line-height:1.5">이 비밀번호로 나중에 수정·삭제할 수 있어요. 잊지 않게 기억해두세요.</p>
     <button class="primarybtn" id="ngCreateBtn" style="width:100%;justify-content:center;padding:11px 0">만들기</button>
   </div>
 </div>
 
-<!-- 관리자 비밀번호 확인 모달 -->
+<!-- 비밀번호 확인 모달 (삭제/수정 공용) -->
 <div class="modal-overlay" id="adminModal">
   <div class="modal-card" style="max-width:340px">
     <div class="modal-head">
-      <h3>🔒 관리자 확인</h3>
+      <h3 id="pwModalTitle">🔒 비밀번호 확인</h3>
       <button class="modal-x" id="adminClose">×</button>
     </div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">가이드 삭제는 관리자만 가능해요.<br>관리자 비밀번호를 입력해주세요.</p>
+    <p id="pwModalDesc" style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">비밀번호를 입력해주세요.</p>
     <div style="position:relative">
       <input type="password" id="adminPw" placeholder="비밀번호 입력" maxlength="30" style="padding-right:40px">
       <button id="adminPwToggle" type="button" style="position:absolute;right:10px;top:50%;transform:translateY(-60%);background:none;border:0;color:var(--muted);cursor:pointer;font-size:15px">👁</button>
     </div>
     <p id="adminErr" style="font-size:12px;color:var(--danger);margin-bottom:8px;display:none">비밀번호가 틀렸어요.</p>
-    <button class="dangerbtn" id="adminConfirmBtn" style="width:100%;justify-content:center;padding:11px 0;margin-top:4px">삭제 확인</button>
+    <button class="dangerbtn" id="adminConfirmBtn" style="width:100%;justify-content:center;padding:11px 0;margin-top:4px">확인</button>
   </div>
 </div>
 
@@ -455,6 +463,11 @@ function toast(msg,type){
   t.textContent=msg; t.className="toast show"+(type==="err"?" err":"");
   clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove("show"),2600);
 }
+/* 비밀번호 해시 (SHA-256, 평문 비번을 그대로 저장하지 않기 위한 용도) */
+async function hashPw(pw){
+  const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(String(pw)));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
 const PALETTE=["var(--brand2)","var(--gold)","#7f9bff","#ff9f43","#5fd089","#ff5e7e","#37cdbf","#b58cff"];
 function colorFor(id){let h=0;for(const ch of String(id))h=(h*31+ch.charCodeAt(0))>>>0;return PALETTE[h%PALETTE.length];}
 const EMOJIS=["📘","🔬","⚔️","🛡️","🏰","👑","💰","🗺️","🎯","🐉","🔥","💎","📦","⭐","🧪","🛠️","📊","🎮"];
@@ -528,7 +541,7 @@ function renderGrid(){
 
   const head=document.createElement("div");
   head.className="board-head";
-  head.innerHTML='<span class="h-title">제목</span><span class="h-meta">수정일</span>';
+  head.innerHTML='<span class="h-title">제목</span><span class="h-meta">작성자</span><span class="h-meta">수정일</span>';
   board.appendChild(head);
 
   filtered.forEach(g=>{
@@ -543,6 +556,7 @@ function renderGrid(){
         '</div>'+
         (g.desc?'<div class="post-desc">'+esc(g.desc)+'</div>':'')+
       '</div>'+
+      '<div class="post-meta">'+esc(g.author||"관리자")+'</div>'+
       '<div class="post-meta">'+fmtAgo(g.updatedAt)+'</div>';
     el.onclick=()=>openGuide(g.id);
     board.appendChild(el);
@@ -572,6 +586,8 @@ function openNewGuideModal(){
   ngIcon="📘";
   document.getElementById("ngTitle").value="";
   document.getElementById("ngDesc").value="";
+  document.getElementById("ngAuthor").value="";
+  document.getElementById("ngPw").value="";
   buildNgEmojiRow();
   document.getElementById("newGuideModal").classList.add("show");
   setTimeout(()=>document.getElementById("ngTitle").focus(),50);
@@ -582,18 +598,24 @@ document.getElementById("newGuideModal").onclick=e=>{if(e.target.id==="newGuideM
 document.getElementById("ngCreateBtn").onclick=async()=>{
   const title=document.getElementById("ngTitle").value.trim();
   if(!title){toast("제목을 입력해주세요.","err");return;}
-  const g={id:uid(),icon:ngIcon,title,desc:document.getElementById("ngDesc").value.trim(),updatedAt:Date.now(),blockCount:0};
+  const author=document.getElementById("ngAuthor").value.trim();
+  const pw=document.getElementById("ngPw").value;
+  if(!author){toast("작성자 이름을 입력해주세요.","err");return;}
+  if(!pw){toast("수정·삭제에 쓸 비밀번호를 입력해주세요.","err");return;}
+  const authorPwHash=await hashPw(pw);
+  const g={id:uid(),icon:ngIcon,title,desc:document.getElementById("ngDesc").value.trim(),
+    author,authorPwHash,updatedAt:Date.now(),blockCount:0};
   guides.push(g);
   await saveJSON("guides:list",guides,true);
   closeNewGuideModal();
-  openGuide(g.id);
+  openGuide(g.id,true);
 };
 
 /* ── 상세/편집 화면 ── */
-async function openGuide(id){
+async function openGuide(id,startInEdit){
   currentGuide=guides.find(g=>g.id===id);
   if(!currentGuide)return;
-  setViewMode("read");   // 항상 읽기(보기) 모드로 시작
+  setViewMode(startInEdit?"edit":"read");
   document.getElementById("gridView").classList.add("hidden-view");
   document.getElementById("detailView").classList.add("active-view");
   document.getElementById("detailView").classList.remove("hidden-view");
@@ -602,8 +624,20 @@ async function openGuide(id){
   let content=await loadJSON("guide:"+id+":content",true);
   if(!content||!content.blocksOrder)content={blocksOrder:[],blocks:{}};
   currentContent=content;
+  // 새로 만든 글(편집 모드로 바로 진입)이고 아직 내용이 비어있다면,
+  // 본문을 바로 입력할 수 있도록 빈 텍스트 블록을 만들어 커서를 둠
+  if(startInEdit&&currentContent.blocksOrder.length===0){
+    const bid=uid();
+    currentContent.blocksOrder.push(bid);
+    currentContent.blocks[bid]={type:"text",text:""};
+  }
   renderDetail();
   setSaveIndicator("모두 저장됨","saved");
+  if(startInEdit){
+    const tas=document.querySelectorAll(".blk-text");
+    const last=tas[tas.length-1];
+    if(last)last.focus();
+  }
 }
 function backToGrid(){
   document.getElementById("detailView").classList.remove("active-view");
@@ -626,17 +660,12 @@ function setViewMode(m){
   const btn=document.getElementById("viewToggleBtn");
   if(btn)btn.textContent=(m==="read")?"✏️ 편집하기":"👁 게시글 보기";
 }
-document.getElementById("viewToggleBtn").onclick=()=>{
-  setViewMode(viewMode==="read"?"edit":"read");
-  if(currentContent)renderBlocks();
-  document.getElementById("emojiPop").hidden=true;
-  window.scrollTo({top:0,behavior:"smooth"});
-};
 
 function renderDetail(){
   document.getElementById("iconBtn").textContent=currentGuide.icon||"📘";
   document.getElementById("dTitle").value=currentGuide.title||"";
   document.getElementById("dDesc").value=currentGuide.desc||"";
+  document.getElementById("dAuthor").textContent=currentGuide.author?("✍️ "+currentGuide.author):"✍️ 관리자 작성";
   renderBlocks();
   updateCapHint();
 }
@@ -978,19 +1007,24 @@ document.addEventListener("click",e=>{
   if(!pop.hidden&&!pop.contains(e.target)&&e.target.id!=="iconBtn")pop.hidden=true;
 });
 
-/* ── 관리자 비밀번호 확인 후 삭제 ── */
+/* ── 비밀번호 확인 모달 (범용: 삭제/수정 공용) ──
+   onConfirm(pw)은 입력된 평문 비밀번호를 받아 true/false(또는 Promise<boolean>)를 반환해야 함.
+   true를 반환하면 모달을 닫고, false면 "비밀번호가 틀렸어요" 에러를 보여줌. */
 const ADMIN_PW="Eckrgkstkfka8*";
-let pendingDeleteId=null;
+let pwModalOnConfirm=null;
 
-function openAdminModal(){
+function openPwModal({title,desc,onConfirm}){
+  document.getElementById("pwModalTitle").textContent=title||"🔒 비밀번호 확인";
+  document.getElementById("pwModalDesc").innerHTML=desc||"비밀번호를 입력해주세요.";
   document.getElementById("adminPw").value="";
   document.getElementById("adminErr").style.display="none";
+  pwModalOnConfirm=onConfirm;
   document.getElementById("adminModal").classList.add("show");
   setTimeout(()=>document.getElementById("adminPw").focus(),50);
 }
 function closeAdminModal(){
   document.getElementById("adminModal").classList.remove("show");
-  pendingDeleteId=null;
+  pwModalOnConfirm=null;
 }
 document.getElementById("adminClose").onclick=closeAdminModal;
 document.getElementById("adminModal").onclick=e=>{if(e.target.id==="adminModal")closeAdminModal();};
@@ -1010,26 +1044,81 @@ document.getElementById("adminPw").addEventListener("keydown",e=>{
 
 document.getElementById("adminConfirmBtn").onclick=async()=>{
   const pw=document.getElementById("adminPw").value;
-  if(pw!==ADMIN_PW){
+  const fn=pwModalOnConfirm;
+  if(!fn)return;
+  const ok=await fn(pw);
+  if(!ok){
     document.getElementById("adminErr").style.display="block";
     document.getElementById("adminPw").value="";
     document.getElementById("adminPw").focus();
     return;
   }
-  const id=pendingDeleteId;  // 닫기 전에 먼저 id 저장
   closeAdminModal();
-  if(!id)return;
+};
+
+/* 글 작성자 비밀번호 검증 (해시 비교). 작성자 정보가 없는 옛 글은 항상 false. */
+async function checkAuthorPw(guide,pw){
+  if(!guide||!guide.authorPwHash)return false;
+  return (await hashPw(pw))===guide.authorPwHash;
+}
+function isAdminPw(pw){return pw===ADMIN_PW;}
+
+/* ── 삭제: 작성자 본인 비밀번호 또는 관리자 비밀번호 모두 허용 ── */
+async function doDeleteGuide(id){
   guides=guides.filter(g=>g.id!==id);
   await saveJSON("guides:list",guides,true);
   await storage.delete("guide:"+id+":content",true);
   backToGrid();
   toast("가이드를 삭제했어요.");
-};
-
+}
 document.getElementById("deleteGuideBtn").onclick=()=>{
   if(!currentGuide)return;
-  pendingDeleteId=currentGuide.id;
-  openAdminModal();
+  const guide=currentGuide, id=guide.id;
+  const hasAuthor=!!guide.authorPwHash;
+  openPwModal({
+    title:"🗑 삭제 확인",
+    desc:hasAuthor
+      ?"작성자 본인이면 작성 시 입력한 비밀번호를,<br>운영자라면 관리자 비밀번호를 입력해주세요."
+      :"작성자 정보가 없는 가이드예요.<br>관리자 비밀번호를 입력해주세요.",
+    onConfirm: async(pw)=>{
+      if(isAdminPw(pw)||await checkAuthorPw(guide,pw)){
+        await doDeleteGuide(id);
+        return true;
+      }
+      return false;
+    }
+  });
+};
+
+/* ── 수정(편집 모드 진입): 작성자 본인 비밀번호 또는 관리자 비밀번호 ── */
+document.getElementById("viewToggleBtn").onclick=()=>{
+  // 편집 모드 → 보기 모드 전환은 비번 없이 자유
+  if(viewMode==="edit"){
+    setViewMode("read");
+    if(currentContent)renderBlocks();
+    document.getElementById("emojiPop").hidden=true;
+    window.scrollTo({top:0,behavior:"smooth"});
+    return;
+  }
+  // 보기 모드 → 편집 모드 전환은 비밀번호 확인 필요
+  const guide=currentGuide;
+  const hasAuthor=!!guide.authorPwHash;
+  openPwModal({
+    title:"✏️ 수정 권한 확인",
+    desc:hasAuthor
+      ?"작성 시 입력한 비밀번호를 입력하면 수정할 수 있어요.<br>(운영자는 관리자 비밀번호로도 가능해요)"
+      :"작성자 정보가 없는 가이드예요.<br>관리자 비밀번호를 입력해주세요.",
+    onConfirm: async(pw)=>{
+      if(isAdminPw(pw)||await checkAuthorPw(guide,pw)){
+        setViewMode("edit");
+        if(currentContent)renderBlocks();
+        document.getElementById("emojiPop").hidden=true;
+        window.scrollTo({top:0,behavior:"smooth"});
+        return true;
+      }
+      return false;
+    }
+  });
 };
 
 /* ── 저장 ── */
