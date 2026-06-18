@@ -263,6 +263,27 @@
     box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 16px 40px -28px rgba(0,0,0,.75)}
   #detailView.reading .detail-head{max-width:760px;margin-bottom:18px}
 
+  /* ── 게시글 내 검색 ── */
+  .post-search-bar{display:none;align-items:center;gap:8px;max-width:760px;margin:0 auto 16px;
+    background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:9px 12px}
+  #detailView.reading .post-search-bar{display:flex}
+  .post-search-bar .ps-icon{opacity:.55;flex-shrink:0;display:flex}
+  .post-search-bar input{flex:1;background:transparent;border:0;color:var(--tx);font-size:13.5px;outline:none;min-width:0}
+  .post-search-bar input::placeholder{color:var(--dim)}
+  .ps-count{font-size:12px;color:var(--dim);font-weight:600;white-space:nowrap;flex-shrink:0}
+  .ps-count.has-match{color:var(--brand2)}
+  .ps-count.no-match{color:var(--danger)}
+  .ps-nav{display:flex;gap:4px;flex-shrink:0}
+  .ps-nav button{width:26px;height:26px;border-radius:7px;background:var(--raised);border:1px solid var(--line2);
+    color:var(--tx);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.12s}
+  .ps-nav button:hover:not(:disabled){border-color:var(--brand2);color:var(--brand2)}
+  .ps-nav button:disabled{opacity:.35;cursor:not-allowed}
+  .ps-clear{width:24px;height:24px;border-radius:7px;background:transparent;border:0;color:var(--dim);
+    font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ps-clear:hover{color:var(--tx)}
+  mark.ps-hit{background:rgba(244,196,81,.32);color:var(--tx);border-radius:3px;padding:0 1px}
+  mark.ps-hit.ps-active{background:var(--gold);color:#1a1406;box-shadow:0 0 0 2px rgba(244,196,81,.35)}
+
   /* ── 표 보기 모드 ── */
   .read-table-wrap{width:100%;overflow-x:auto}
   .read-table{width:100%;border-collapse:collapse;font-size:14px}
@@ -356,6 +377,16 @@
       <input type="file" id="fileInput" accept="image/*" multiple hidden>
       <span class="paste-hint"><kbd>Ctrl</kbd>+<kbd>V</kbd> 붙여넣기 · 드래그&드롭 가능</span>
       <span class="cap-hint" id="capHint"></span>
+    </div>
+    <div class="post-search-bar" id="postSearchBar">
+      <span class="ps-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+      <input id="postSearchInput" placeholder="이 게시글 안에서 검색…" autocomplete="off">
+      <span class="ps-count" id="postSearchCount"></span>
+      <div class="ps-nav">
+        <button type="button" id="postSearchPrev" title="이전 결과">▲</button>
+        <button type="button" id="postSearchNext" title="다음 결과">▼</button>
+      </div>
+      <button type="button" class="ps-clear" id="postSearchClear" title="검색어 지우기">×</button>
     </div>
     <div class="blocks-wrap" id="blocksWrap"></div>
     <div class="empty-state" id="blocksEmpty" hidden>
@@ -829,6 +860,12 @@ async function openGuide(id,startInEdit,autoNickname){
   document.getElementById("detailView").classList.remove("hidden-view");
   window.scrollTo(0,0);
   setSaveIndicator("불러오는 중…","saving");
+  // 새 글을 여는 것이므로 이전 글에서 쓰던 게시글 내 검색어/결과는 초기화
+  psTerm=""; psMatches=[]; psIndex=-1;
+  const psInput=document.getElementById("postSearchInput");
+  if(psInput)psInput.value="";
+  const psCountEl=document.getElementById("postSearchCount");
+  if(psCountEl){psCountEl.textContent="";psCountEl.className="ps-count";}
   let content=await loadJSON("guide:"+id+":content",true);
   if(!content||!content.blocksOrder)content={blocksOrder:[],blocks:{}};
   currentContent=content;
@@ -896,6 +933,14 @@ function setViewMode(m){
   const btn=document.getElementById("viewToggleBtn");
   if(btn)btn.textContent=(m==="read")?"✏️ 편집하기":"👁 게시글 보기";
   renderLockBadgeDetail();
+  // 편집 모드로 들어가면 게시글 검색은 의미가 없으므로 초기화
+  if(m!=="read"){
+    psTerm=""; psMatches=[]; psIndex=-1;
+    const psInput=document.getElementById("postSearchInput");
+    if(psInput)psInput.value="";
+    const countEl=document.getElementById("postSearchCount");
+    if(countEl){countEl.textContent="";countEl.className="ps-count";}
+  }
 }
 
 function renderDetail(){
@@ -957,6 +1002,7 @@ function renderBlocks(){
               textDiv.style.display=isTable?"none":"";
               tableWrap.style.display=isTable?"":"none";
               toggleBtn.textContent=isTable?"📝 목록 형식으로 보기":"📊 표 형식으로 보기";
+              applyPostSearch();
             };
           } else {
             const p=document.createElement("div");
@@ -998,6 +1044,7 @@ function renderBlocks(){
         wrap.appendChild(fig);
       }else{i++;}
     }
+    applyPostSearch();
     return;
   }
 
@@ -1220,6 +1267,133 @@ function renderBlocks(){
   requestAnimationFrame(()=>{
   });
 }
+
+/* ── 게시글 내 검색 (보기 모드에서 텍스트/표 내용을 하이라이트하고 결과 사이를 이동) ── */
+let psTerm="";
+let psMatches=[];
+let psIndex=-1;
+function escRegExp(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}
+// 텍스트 노드만 골라서 검색어를 <mark>로 감싸 하이라이트
+function highlightNode(root,term){
+  if(!term)return;
+  const re=new RegExp(escRegExp(term),"gi");
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{
+    acceptNode(node){
+      if(!node.nodeValue||!node.nodeValue.trim())return NodeFilter.FILTER_REJECT;
+      const p=node.parentElement;
+      if(p&&(p.tagName==="MARK"||p.closest("mark")))return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  const nodes=[];
+  let n;
+  while((n=walker.nextNode()))nodes.push(n);
+  nodes.forEach(textNode=>{
+    const text=textNode.nodeValue;
+    if(!re.test(text)){re.lastIndex=0;return;}
+    re.lastIndex=0;
+    const frag=document.createDocumentFragment();
+    let last=0,m;
+    while((m=re.exec(text))){
+      if(m.index>last)frag.appendChild(document.createTextNode(text.slice(last,m.index)));
+      const mark=document.createElement("mark");
+      mark.className="ps-hit";
+      mark.textContent=m[0];
+      frag.appendChild(mark);
+      last=m.index+m[0].length;
+      if(m[0].length===0)re.lastIndex++;
+    }
+    if(last<text.length)frag.appendChild(document.createTextNode(text.slice(last)));
+    textNode.parentNode.replaceChild(frag,textNode);
+  });
+}
+function clearPostSearchHighlights(){
+  document.querySelectorAll("#blocksWrap mark.ps-hit").forEach(mark=>{
+    const parent=mark.parentNode;
+    if(!parent)return;
+    parent.replaceChild(document.createTextNode(mark.textContent),mark);
+    parent.normalize();
+  });
+  psMatches=[]; psIndex=-1;
+}
+function updatePostSearchCount(){
+  const countEl=document.getElementById("postSearchCount");
+  if(!countEl)return;
+  if(!psTerm){countEl.textContent="";countEl.className="ps-count";return;}
+  if(psMatches.length===0){
+    countEl.textContent="일치 결과 없음";
+    countEl.className="ps-count no-match";
+  }else{
+    countEl.textContent=(psIndex+1)+" / "+psMatches.length;
+    countEl.className="ps-count has-match";
+  }
+  const prevBtn=document.getElementById("postSearchPrev");
+  const nextBtn=document.getElementById("postSearchNext");
+  if(prevBtn)prevBtn.disabled=psMatches.length===0;
+  if(nextBtn)nextBtn.disabled=psMatches.length===0;
+}
+function setActivePostSearchMatch(i){
+  if(psMatches.length===0)return;
+  if(psIndex>=0&&psMatches[psIndex])psMatches[psIndex].classList.remove("ps-active");
+  psIndex=((i%psMatches.length)+psMatches.length)%psMatches.length;
+  const el=psMatches[psIndex];
+  if(el){
+    el.classList.add("ps-active");
+    el.scrollIntoView({behavior:"smooth",block:"center"});
+  }
+  updatePostSearchCount();
+}
+// renderBlocks가 보기 모드로 다시 그려질 때마다 호출되어 현재 검색어로 하이라이트를 재적용
+function applyPostSearch(){
+  clearPostSearchHighlights();
+  if(viewMode!=="read"||!psTerm)return;
+  const wrap=document.getElementById("blocksWrap");
+  if(!wrap)return;
+  // 표/목록 토글로 숨겨진(display:none) 콘텐츠는 건너뛰고, 화면에 보이는 콘텐츠만 검색
+  function isHiddenByInlineStyle(el){
+    let cur=el;
+    while(cur&&cur!==wrap){
+      if(cur.style&&cur.style.display==="none")return true;
+      cur=cur.parentElement;
+    }
+    return false;
+  }
+  wrap.querySelectorAll(".read-text, .read-table td").forEach(el=>{
+    if(isHiddenByInlineStyle(el))return;
+    highlightNode(el,psTerm);
+  });
+  psMatches=[...wrap.querySelectorAll("mark.ps-hit")];
+  updatePostSearchCount();
+  if(psMatches.length>0)setActivePostSearchMatch(0);
+}
+function runPostSearch(term){
+  psTerm=term.trim();
+  applyPostSearch();
+}
+let psDebounce=null;
+(function initPostSearchUI(){
+  const input=document.getElementById("postSearchInput");
+  const prevBtn=document.getElementById("postSearchPrev");
+  const nextBtn=document.getElementById("postSearchNext");
+  const clearBtn=document.getElementById("postSearchClear");
+  if(!input)return;
+  input.addEventListener("input",()=>{
+    clearTimeout(psDebounce);
+    psDebounce=setTimeout(()=>runPostSearch(input.value),150);
+  });
+  input.addEventListener("keydown",e=>{
+    if(e.key==="Enter"){
+      e.preventDefault();
+      if(psMatches.length>0)setActivePostSearchMatch(psIndex+(e.shiftKey?-1:1));
+    }else if(e.key==="Escape"){
+      input.value=""; runPostSearch("");
+    }
+  });
+  prevBtn.onclick=()=>{if(psMatches.length>0)setActivePostSearchMatch(psIndex-1);};
+  nextBtn.onclick=()=>{if(psMatches.length>0)setActivePostSearchMatch(psIndex+1);};
+  clearBtn.onclick=()=>{input.value=""; runPostSearch(""); input.focus();};
+})();
+
 function moveBlock(id,dir){
   const order=currentContent.blocksOrder;
   const i=order.indexOf(id), j=i+dir;
