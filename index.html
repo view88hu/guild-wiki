@@ -368,7 +368,7 @@
       <input type="file" id="fileInput" accept="image/*" multiple hidden>
       <span class="paste-hint"><kbd>Ctrl</kbd>+<kbd>V</kbd> 붙여넣기 · 드래그&드롭 가능</span>
       <span class="cap-hint" id="capHint"></span>
-      <div class="detail-search" style="margin-left:auto" id="detailSearchBox" hidden>
+      <div class="detail-search" style="margin-left:auto" id="detailSearchBox">
         <input type="text" id="detailSearchInput" placeholder="내용 검색...">
         <span class="detail-search-counter" id="detailSearchCounter"></span>
       </div>
@@ -912,6 +912,11 @@ function setViewMode(m){
   const btn=document.getElementById("viewToggleBtn");
   if(btn)btn.textContent=(m==="read")?"✏️ 편집하기":"👁 게시글 보기";
   renderLockBadgeDetail();
+  // 검색 박스 표시/숨기기
+  const detailSearchBox=document.getElementById("detailSearchBox");
+  if(detailSearchBox){
+    detailSearchBox.style.display=(m==="read")?"flex":"none";
+  }
 }
 
 function renderDetail(){
