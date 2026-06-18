@@ -700,8 +700,8 @@ function renderBlocks(){
           const lines=b.text.trim().split("\n").filter(l=>l.trim());
           const container=document.createElement("div");
 
-          // 줄이 5개 이상이면 표 보기 토글 버튼 표시
-          if(lines.length>=5){
+          // tableMode 플래그가 있거나 줄이 5개 이상이면 표로 표시
+          if(b.tableMode || lines.length>=5){
             let isTable=true;
             const toggleBtn=document.createElement("button");
             toggleBtn.className="table-toggle-btn";
@@ -718,7 +718,7 @@ function renderBlocks(){
             const table=document.createElement("table");
             table.className="read-table";
             const thead=document.createElement("thead");
-            thead.innerHTML='<tr><th>번호</th><th>닉네임</th></tr>';
+            thead.innerHTML=`<tr><th>번호</th><th>${esc(b.colLabel||"닉네임")}</th></tr>`;
             const tbody=document.createElement("tbody");
             lines.forEach((line,idx)=>{
               const tr=document.createElement("tr");
@@ -807,18 +807,41 @@ function renderBlocks(){
         (idx<order.length-1?'<button type="button" class="blk-btn" data-act="down" title="아래로">▼</button>':"")+
         '<button type="button" class="blk-btn danger" data-act="del" title="삭제">🗑</button></div>';
       el.innerHTML=ctrl;
-      el.insertAdjacentHTML("beforeend",`
-        <div class="edit-table-wrap">
-          <table class="read-table edit-table">
-            <thead><tr><th style="width:52px">번호</th><th>닉네임</th><th style="width:36px"></th></tr></thead>
-            <tbody class="edit-tbody"></tbody>
-          </table>
-          <button type="button" class="edit-add-row-btn">+ 줄 추가</button>
-        </div>
-      `);
 
-      const tbody=el.querySelector(".edit-tbody");
-      const addRowBtn=el.querySelector(".edit-add-row-btn");
+      // 표/텍스트 모드 토글 버튼
+      const modeBtn=document.createElement("button");
+      modeBtn.type="button"; modeBtn.className="table-toggle-btn";
+      const isTableMode=()=>!!grp.block.tableMode;
+      modeBtn.textContent=isTableMode()?"📝 텍스트로 전환":"📊 표 형식으로 전환";
+      el.appendChild(modeBtn);
+
+      // ── 텍스트 모드 ──
+      const textArea=document.createElement("textarea");
+      textArea.className="blk-text";
+      textArea.placeholder="내용을 입력하세요…";
+      textArea.value=grp.block.text||"";
+      textArea.style.display=isTableMode()?"none":"";
+      textArea.oninput=()=>{grp.block.text=textArea.value;autoGrow(textArea);updateCapHint();scheduleSave();};
+      el.appendChild(textArea);
+      autoGrow(textArea);
+
+      // ── 표 모드 ──
+      const tableWrap=document.createElement("div");
+      tableWrap.className="edit-table-wrap";
+      tableWrap.style.display=isTableMode()?"":"none";
+      const colLabel=grp.block.colLabel||"닉네임";
+      tableWrap.innerHTML=`
+        <table class="read-table edit-table">
+          <thead><tr><th style="width:52px">번호</th><th><input class="col-label-input" type="text" value="${esc(colLabel)}" placeholder="열 제목" style="width:100%;background:transparent;border:none;outline:none;color:var(--brand2);font-size:12px;font-weight:700;text-align:center;letter-spacing:.04em"></th><th style="width:36px"></th></tr></thead>
+          <tbody class="edit-tbody"></tbody>
+        </table>
+        <button type="button" class="edit-add-row-btn">+ 줄 추가</button>
+      `;
+      el.appendChild(tableWrap);
+      tableWrap.querySelector(".col-label-input").oninput=e=>{grp.block.colLabel=e.target.value;scheduleSave();};
+
+      const tbody=tableWrap.querySelector(".edit-tbody");
+      const addRowBtn=tableWrap.querySelector(".edit-add-row-btn");
 
       function getLines(){return (grp.block.text||"").split("\n").filter(l=>l.trim());}
       function saveLines(){
@@ -826,16 +849,9 @@ function renderBlocks(){
         grp.block.text=inputs.map(i=>i.value).join("\n");
         scheduleSave(); updateCapHint();
       }
-      function renderRows(){
-        const lines=getLines();
-        tbody.innerHTML="";
-        (lines.length?lines:[""]).forEach((line,i)=>{
-          addRow(line,i);
-        });
-      }
-      function addRow(value,idx){
+      function addRow(value,rowIdx){
         const allRows=[...tbody.querySelectorAll("tr")];
-        const rowNum=(idx!=null?idx:allRows.length)+1;
+        const rowNum=(rowIdx!=null?rowIdx:allRows.length)+1;
         const tr=document.createElement("tr");
         tr.innerHTML=`
           <td style="text-align:center;color:var(--dim);white-space:nowrap">${rowNum}</td>
@@ -851,8 +867,30 @@ function renderBlocks(){
           tr.querySelector("td:first-child").textContent=i+1;
         });
       }
-      addRowBtn.onclick=()=>{addRow("",null); renumberRows(); saveLines(); addRowBtn.previousElementSibling&&addRowBtn.previousElementSibling.querySelector&&tbody.querySelector("tr:last-child input")&&tbody.querySelector("tr:last-child input").focus();};
-      renderRows();
+      function renderRows(){
+        tbody.innerHTML="";
+        const lines=getLines();
+        (lines.length?lines:[""]).forEach((line,i)=>addRow(line,i));
+      }
+      addRowBtn.onclick=()=>{addRow("",null); renumberRows(); saveLines(); tbody.querySelector("tr:last-child input")&&tbody.querySelector("tr:last-child input").focus();};
+      if(isTableMode()) renderRows();
+
+      // 모드 전환
+      modeBtn.onclick=()=>{
+        grp.block.tableMode=!grp.block.tableMode;
+        if(grp.block.tableMode){
+          textArea.style.display="none";
+          tableWrap.style.display="";
+          modeBtn.textContent="📝 텍스트로 전환";
+          renderRows();
+        } else {
+          tableWrap.style.display="none";
+          textArea.style.display="";
+          modeBtn.textContent="📊 표 형식으로 전환";
+          autoGrow(textArea);
+        }
+        scheduleSave();
+      };
 
       el.querySelectorAll(".blk-ctrl .blk-btn").forEach(btn=>{
         btn.onclick=()=>{
