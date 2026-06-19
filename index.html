@@ -299,6 +299,7 @@
   .edit-add-row-btn{margin-top:8px;width:100%;background:var(--raised);border:1px dashed var(--line2);
     color:var(--muted);font-size:13px;font-weight:700;border-radius:8px;padding:8px;cursor:pointer;transition:.15s}
   .edit-add-row-btn:hover{border-color:var(--brand2);color:var(--brand2)}
+  .table-toggle-btn{background:transparent;
     border:1px solid var(--line2);color:var(--muted);font-size:12px;font-weight:700;
     border-radius:8px;padding:5px 12px;cursor:pointer;transition:.15s;margin-bottom:10px}
   .table-toggle-btn:hover{border-color:var(--brand2);color:var(--brand2)}
@@ -1412,10 +1413,10 @@ function addTextBlock(){
   currentContent.blocksOrder.push(id);
   currentContent.blocks[id]={type:"text",text:""};
   renderBlocks(); scheduleSave();
-  // 마지막 텍스트 블록의 첫 번째 입력칸에 포커스
-  const inputs=document.querySelectorAll(".edit-row-input");
-  const last=inputs[inputs.length-1];
-  if(last)last.focus();
+  // 방금 추가한 텍스트 블록의 textarea에 포커스
+  const tas=document.querySelectorAll("#blocksWrap .blk-text");
+  const last=tas[tas.length-1];
+  if(last){last.focus();last.scrollIntoView({behavior:"smooth",block:"center"});}
 }
 document.getElementById("addTextBtn").onclick=addTextBlock;
 document.getElementById("addImgBtn").onclick=()=>document.getElementById("fileInput").click();
@@ -1460,7 +1461,7 @@ document.getElementById("fileInput").onchange=e=>{
 /* ── Ctrl+V 붙여넣기로 스크린샷 추가 ── */
 document.addEventListener("paste",e=>{
   // 상세 편집 화면에서만 동작 (보기 모드 제외)
-  if(document.getElementById("detailView").hidden||!currentGuide||viewMode!=="edit")return;
+  if(!document.getElementById("detailView").classList.contains("active-view")||!currentGuide||viewMode!=="edit")return;
   const cd=e.clipboardData||window.clipboardData;
   if(!cd)return;
   const imgs=[];
@@ -1493,7 +1494,7 @@ function flashPaste(){
   clearTimeout(pasteFlash._tm);
   pasteFlash._tm=setTimeout(()=>pasteFlash.classList.remove("show"),450);
 }
-function inEditView(){return !document.getElementById("detailView").hidden&&currentGuide&&viewMode==="edit";}
+function inEditView(){return document.getElementById("detailView").classList.contains("active-view")&&currentGuide&&viewMode==="edit";}
 window.addEventListener("dragenter",e=>{
   if(!inEditView())return;
   if(![...(e.dataTransfer?.types||[])].includes("Files"))return;
@@ -1545,7 +1546,9 @@ document.addEventListener("click",e=>{
 /* ── 비밀번호 확인 모달 (범용: 삭제/수정 공용) ──
    onConfirm(pw)은 입력된 평문 비밀번호를 받아 true/false(또는 Promise<boolean>)를 반환해야 함.
    true를 반환하면 모달을 닫고, false면 "비밀번호가 틀렸어요" 에러를 보여줌. */
-const ADMIN_PW="Eckrgkstkfka8*";
+/* 관리자 비밀번호는 해시로만 비교해 소스코드에 평문이 노출되지 않도록 합니다.
+   변경이 필요하면 새 비밀번호의 SHA-256 해시값으로 교체하세요. */
+const ADMIN_PW_HASH="39acb5b404d4d737a3cb54f9daa0b91f2e7e41425613a1754ca492420de1842f";
 let pwModalOnConfirm=null;
 
 function openPwModal({title,desc,onConfirm}){
@@ -1596,7 +1599,7 @@ async function checkAuthorPw(guide,pw){
   if(!guide||!guide.authorPwHash)return false;
   return (await hashPw(pw))===guide.authorPwHash;
 }
-function isAdminPw(pw){return pw===ADMIN_PW;}
+async function isAdminPw(pw){return (await hashPw(pw))===ADMIN_PW_HASH;}
 
 /* ── 삭제: 작성자 본인 비밀번호 또는 관리자 비밀번호 모두 허용 ── */
 async function doDeleteGuide(id){
@@ -1619,7 +1622,7 @@ document.getElementById("deleteGuideBtn").onclick=()=>{
       ?"작성자 본인이면 작성 시 입력한 비밀번호를,<br>운영자라면 관리자 비밀번호를 입력해주세요."
       :"작성자 정보가 없는 가이드예요.<br>관리자 비밀번호를 입력해주세요.",
     onConfirm: async(pw)=>{
-      if(isAdminPw(pw)||await checkAuthorPw(guide,pw)){
+      if(await isAdminPw(pw)||await checkAuthorPw(guide,pw)){
         await doDeleteGuide(id);
         return true;
       }
@@ -1685,7 +1688,7 @@ document.getElementById("viewToggleBtn").onclick=async()=>{
       ?"작성 시 입력한 비밀번호를 입력하면 수정할 수 있어요.<br>(운영자는 관리자 비밀번호로도 가능해요)"
       :"작성자 정보가 없는 가이드예요.<br>관리자 비밀번호를 입력해주세요.",
     onConfirm: async(pw)=>{
-      if(isAdminPw(pw)||await checkAuthorPw(guide,pw)){
+      if(await isAdminPw(pw)||await checkAuthorPw(guide,pw)){
         // 비밀번호 확인 통과 후 다시 한 번 락을 확인 (그 사이 다른 사람이 먼저 들어갔을 수 있음)
         const recheck=getActiveLock(guide.id);
         if(recheck && recheck.clientId!==CLIENT_ID){
