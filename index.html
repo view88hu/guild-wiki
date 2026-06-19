@@ -902,7 +902,7 @@ async function openGuide(id,startInEdit,autoNickname){
   let content;
   if(currentGuide._botEntry){
     const entry=currentGuide._botEntry;
-    const bid1="bot-main-"+id, bid2="bot-src-"+id, bid3="bot-orig-"+id;
+    const bid1="bot-main-"+id, bid2="bot-src-"+id, bid3="bot-orig-"+id, bidSp="bot-spacer-"+id;
     const blocks={};
     const blocksOrder=[];
     if(entry.content){
@@ -914,6 +914,10 @@ async function openGuide(id,startInEdit,autoNickname){
       blocksOrder.push(bid2);
     }
     if(entry.originalContent){
+      if(blocksOrder.length){
+        blocks[bidSp]={type:"spacer"};
+        blocksOrder.push(bidSp);
+      }
       blocks[bid3]={type:"text",text:"📄 원문(영어)\n"+entry.originalContent};
       blocksOrder.push(bid3);
     }
@@ -1110,6 +1114,11 @@ function renderBlocks(){
           fig.appendChild(cap);
         }
         wrap.appendChild(fig);
+      }else if(b.type==="spacer"){
+        const sp=document.createElement("div");
+        sp.style.height="14px";
+        wrap.appendChild(sp);
+        i++;
       }else{i++;}
     }
     applyPostSearch();
