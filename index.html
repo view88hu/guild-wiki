@@ -360,6 +360,7 @@
         <span class="lock-badge" id="lockBadge" hidden></span>
         <span class="save-indicator" id="saveIndicator">대기 중</span>
         <button class="dangerbtn" id="deleteGuideBtn">🗑 삭제</button>
+        <button class="dangerbtn" id="botDeleteGuideBtn" style="display:none">🗑 패치노트 삭제 (운영자)</button>
         <button class="ghostbtn" id="viewToggleBtn">👁 게시글 보기</button>
       </div>
     </div>
@@ -927,10 +928,15 @@ async function openGuide(id,startInEdit,autoNickname){
   const lock=await readLock(id);
   lockState[id]=lock;
 
-  // 봇이 올린 패치노트는 항상 읽기 전용 — 편집/삭제 버튼 숨김
+  // 봇이 올린 패치노트는 항상 읽기 전용
   const isBotGuide=!!currentGuide._botEntry;
-  document.getElementById("deleteGuideBtn").style.display=isBotGuide?"none":"";
+  // 편집 버튼: 봇 글이면 숨김
   document.getElementById("viewToggleBtn").style.display=isBotGuide?"none":"";
+  // 삭제 버튼: 봇 글이면 운영자 전용 삭제 버튼으로 교체
+  const delBtn=document.getElementById("deleteGuideBtn");
+  const botDelBtn=document.getElementById("botDeleteGuideBtn");
+  delBtn.style.display=isBotGuide?"none":"";
+  botDelBtn.style.display=isBotGuide?"":"none";
 
   if(startInEdit && !isBotGuide){
     const res=await tryAcquireLock(id,autoNickname||"작성자");
@@ -946,6 +952,7 @@ async function backToGrid(){
   // 버튼 원복 (봇 글에서 숨겼을 수 있으므로)
   document.getElementById("deleteGuideBtn").style.display="";
   document.getElementById("viewToggleBtn").style.display="";
+  document.getElementById("botDeleteGuideBtn").style.display="none";
   if(myLockGuideId)await releaseLock(myLockGuideId);
   if(currentGuide)unwatchLock(currentGuide.id);
   document.getElementById("detailView").classList.remove("active-view");
@@ -1028,7 +1035,9 @@ function renderBlocks(){
           const container=document.createElement("div");
 
           // tableMode 플래그가 있거나 줄이 5개 이상이면 표로 표시
-          if(b.tableMode || lines.length>=5){
+          // 단, 봇이 올린 패치노트 글은 항상 텍스트로만 표시
+          const isBotBlock=!!(currentGuide&&currentGuide._botEntry);
+          if(!isBotBlock && (b.tableMode || lines.length>=5)){
             let isTable=true;
             const toggleBtn=document.createElement("button");
             toggleBtn.className="table-toggle-btn";
@@ -1670,6 +1679,29 @@ async function doDeleteGuide(id){
   backToGrid();
   toast("가이드를 삭제했어요.");
 }
+/* ── 봇 패치노트 삭제 (운영자 전용) ── */
+document.getElementById("botDeleteGuideBtn").onclick=()=>{
+  if(!currentGuide||!currentGuide._botEntry)return;
+  const guide=currentGuide;
+  // pushKey는 id에서 "bot-" 접두어를 제거한 값
+  const pushKey=guide.id.replace(/^bot-/,"");
+  openPwModal({
+    title:"🗑 패치노트 삭제 확인",
+    desc:"운영자 비밀번호를 입력하면 이 패치노트를 삭제해요.",
+    onConfirm: async(pw)=>{
+      if(!(await isAdminPw(pw)))return false;
+      try{
+        await fbdb.ref("board/guides/"+pushKey).remove();
+        toast("패치노트를 삭제했어요.");
+        backToGrid();
+      }catch(e){
+        toast("삭제 중 오류가 발생했어요: "+e.message,"err");
+      }
+      return true;
+    }
+  });
+};
+
 document.getElementById("deleteGuideBtn").onclick=()=>{
   if(!currentGuide)return;
   const guide=currentGuide, id=guide.id;
