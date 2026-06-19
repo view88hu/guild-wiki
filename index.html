@@ -743,22 +743,52 @@ function defaultGuide(){
   return {id:"research",icon:"🔬",title:"연구 올리는 방법",desc:"연구 단계별 진행 순서와 우선순위를 정리해보세요",updatedAt:Date.now(),blockCount:0};
 }
 
+/* 봇이 board/guides/{pushKey} 에 올린 글을 guides:list 형식으로 변환 */
+function botEntryToGuide(key, entry) {
+  return {
+    id: "bot-" + key,
+    icon: "📋",
+    title: entry.title || "패치노트",
+    desc: (entry.content || "").slice(0, 80).replace(/\n/g, " "),
+    author: "패치노트 봇",
+    updatedAt: entry.createdAt || Date.now(),
+    blockCount: 1,
+    _botEntry: entry,
+  };
+}
+
+let manualGuides = []; // 수동으로 작성한 가이드 목록 (guides:list)
+let botGuides = [];    // 봇이 올린 패치노트 목록 (board/guides)
+
 async function init(){
-  let list=await loadJSON("guides:list",true);
-  if(!list||!Array.isArray(list)){
-    list=[defaultGuide()];
-    await saveJSON("guides:list",list,true);
+  let list = await loadJSON("guides:list", true);
+  if(!list || !Array.isArray(list)) list = [];
+  manualGuides = list;
+
+  // ── 봇이 올린 패치노트(board/guides) 실시간 구독 ──
+  if(fbdb && !window.storage){
+    fbdb.ref("board/guides").on("value", snap => {
+      botGuides = [];
+      if(snap.exists()){
+        snap.forEach(child => {
+          botGuides.push(botEntryToGuide(child.key, child.val()));
+        });
+        botGuides.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      }
+      guides = [...botGuides, ...manualGuides];
+      guides.forEach(g => watchLock(g.id));
+      if(currentGuide) renderLockBadgeDetail();
+      else renderGrid();
+    });
   }
-  guides=list;
+
+  guides = [...botGuides, ...manualGuides];
   renderGrid();
-  // 목록에 있는 모든 글의 락 상태를 구독해 실시간으로 "편집 중" 배지를 갱신
-  guides.forEach(g=>watchLock(g.id));
-  // Firebase 실시간 구독이 있으면 폴링 불필요, 없을 때만 폴링
+  guides.forEach(g => watchLock(g.id));
   if(!fbdb || window.storage){
-    startLockPolling(()=>guides.map(g=>g.id));
+    startLockPolling(() => guides.map(g => g.id));
   }
-  lockListeners.add(()=>{
-    // 상세 화면이 열려 있으면 그쪽 배지를, 아니면 목록 배지를 갱신
+  lockListeners.add(() => {
     if(currentGuide) renderLockBadgeDetail();
     else renderGrid();
   });
@@ -867,17 +897,42 @@ async function openGuide(id,startInEdit,autoNickname){
   if(psInput)psInput.value="";
   const psCountEl=document.getElementById("postSearchCount");
   if(psCountEl){psCountEl.textContent="";psCountEl.className="ps-count";}
-  let content=await loadJSON("guide:"+id+":content",true);
-  if(!content||!content.blocksOrder)content={blocksOrder:[],blocks:{}};
+  // 봇이 올린 글이면 _botEntry에서 바로 블록 구성 (Firebase 추가 읽기 불필요)
+  let content;
+  if(currentGuide._botEntry){
+    const entry=currentGuide._botEntry;
+    const bid1="bot-main-"+id, bid2="bot-src-"+id, bid3="bot-orig-"+id;
+    const blocks={};
+    const blocksOrder=[];
+    if(entry.content){
+      blocks[bid1]={type:"text",text:entry.content};
+      blocksOrder.push(bid1);
+    }
+    if(entry.sourceUrl){
+      blocks[bid2]={type:"text",text:"🔗 디스코드 원문: "+entry.sourceUrl};
+      blocksOrder.push(bid2);
+    }
+    if(entry.originalContent){
+      blocks[bid3]={type:"text",text:"📄 원문(영어)\n"+entry.originalContent};
+      blocksOrder.push(bid3);
+    }
+    content={blocksOrder,blocks};
+  } else {
+    content=await loadJSON("guide:"+id+":content",true);
+    if(!content||!content.blocksOrder)content={blocksOrder:[],blocks:{}};
+  }
   currentContent=content;
 
   watchLock(id);
   const lock=await readLock(id);
   lockState[id]=lock;
 
-  if(startInEdit){
-    // 새로 만든 글을 작성 직후 바로 편집하는 경우: 비밀번호 모달을 또 띄우지 않고
-    // 작성자 이름으로 곧바로 락을 잡아준다.
+  // 봇이 올린 패치노트는 항상 읽기 전용 — 편집/삭제 버튼 숨김
+  const isBotGuide=!!currentGuide._botEntry;
+  document.getElementById("deleteGuideBtn").style.display=isBotGuide?"none":"";
+  document.getElementById("viewToggleBtn").style.display=isBotGuide?"none":"";
+
+  if(startInEdit && !isBotGuide){
     const res=await tryAcquireLock(id,autoNickname||"작성자");
     setViewMode(res.ok?"edit":"read");
     if(!res.ok)toast("다른 사람이 편집 중이라 보기 모드로 열었어요.","err");
@@ -888,6 +943,9 @@ async function openGuide(id,startInEdit,autoNickname){
   setSaveIndicator("모두 저장됨","saved");
 }
 async function backToGrid(){
+  // 버튼 원복 (봇 글에서 숨겼을 수 있으므로)
+  document.getElementById("deleteGuideBtn").style.display="";
+  document.getElementById("viewToggleBtn").style.display="";
   if(myLockGuideId)await releaseLock(myLockGuideId);
   if(currentGuide)unwatchLock(currentGuide.id);
   document.getElementById("detailView").classList.remove("active-view");
