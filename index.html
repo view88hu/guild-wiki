@@ -676,6 +676,35 @@ window.addEventListener("beforeunload",()=>{
 
 /* ── 유틸 ── */
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* 카카오톡/네이버/인스타 등 인앱 브라우저 내부에서 링크를 열면, 그 내부 웹뷰가 구글 로그인을
+   차단(disallowed_useragent)해서 구글 로그인 버튼이 안 보이고 페이스북/OTP 로그인만 뜨는 문제가 생김.
+   링크를 "시스템 기본 브라우저(크롬/사파리)"로 직접 열어주면 구글 로그인이 정상적으로 보임.
+   안드로이드는 intent:// 스킴, iOS는 x-safari-https:// 스킴으로 강제 이동시켜 인앱 웹뷰를 건너뛴다. */
+function openExternal(e,url){
+  if(e){e.preventDefault();}
+  const ua=navigator.userAgent||"";
+  const isAndroid=/Android/i.test(ua);
+  const isIOS=/iPhone|iPad|iPod/i.test(ua);
+  try{
+    if(isAndroid){
+      const stripped=url.replace(/^https?:\/\//,"");
+      const scheme=url.startsWith("https")?"https":"http";
+      const intentUrl="intent://"+stripped+"#Intent;scheme="+scheme+";action=android.intent.action.VIEW;end";
+      window.location.href=intentUrl;
+      setTimeout(()=>{window.open(url,"_blank");},800);
+      return;
+    }
+    if(isIOS){
+      const safariUrl=url.replace(/^https:\/\//,"x-safari-https://").replace(/^http:\/\//,"x-safari-http://");
+      window.location.href=safariUrl;
+      setTimeout(()=>{window.open(url,"_blank");},800);
+      return;
+    }
+  }catch(err){/* 스킴 이동이 막히면 그냥 일반 링크로 */}
+  window.open(url,"_blank");
+}
+
 /* 텍스트 안의 URL을 자동으로 링크(<a>)로 바꿔주는 헬퍼. esc로 이스케이프한 뒤 URL과 줄바꿈을 처리 */
 function linkify(s){
   const escaped=esc(s);
@@ -688,7 +717,7 @@ function linkify(s){
     }
     if(!m)return trail;
     const href=m.startsWith("http")?m:"https://"+m;
-    return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="auto-link">${m}</a>`+trail;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="auto-link" onclick="openExternal(event,'${href.replace(/'/g,"\\'")}')">${m}</a>`+trail;
   });
 }
 function setLinkedText(el,text){
