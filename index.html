@@ -102,6 +102,35 @@
     .post-desc{white-space:normal}
   }
 
+  /* ── 다중 선택 삭제 ── */
+  .select-bar{display:none;align-items:center;gap:10px;flex-wrap:wrap;
+    background:rgba(224,57,95,.07);border:1px solid rgba(224,57,95,.25);
+    border-radius:12px;padding:10px 16px;margin-bottom:14px;animation:fadeIn .18s}
+  .select-bar.show{display:flex}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .select-bar .sel-info{flex:1;font-size:13px;font-weight:700;color:var(--tx)}
+  .select-bar .sel-info span{color:var(--danger)}
+  .selbtn{display:inline-flex;align-items:center;gap:5px;background:var(--danger);color:#fff;
+    font-size:13px;font-weight:800;border:0;border-radius:9px;padding:8px 14px;cursor:pointer;
+    box-shadow:0 4px 14px -6px rgba(224,57,95,.6);transition:.14s;white-space:nowrap}
+  .selbtn:hover{filter:brightness(1.1);transform:translateY(-1px)}
+  .selbtn:disabled{opacity:.45;cursor:not-allowed;transform:none;filter:none}
+  .selbtn.cancel{background:var(--raised);color:var(--muted);border:1px solid var(--line2);box-shadow:none}
+  .selbtn.cancel:hover{border-color:var(--tx);color:var(--tx)}
+  .selbtn.selall{background:var(--raised);color:var(--tx);border:1px solid var(--line2);box-shadow:none}
+  .selbtn.selall:hover{border-color:var(--brand2);color:var(--brand2)}
+
+  .post-row.selectable{padding-left:14px;cursor:default}
+  .post-row.selectable:hover{background:color-mix(in srgb,var(--bar,var(--brand2)) 5%,transparent);transform:none}
+  .post-row.selectable.selected{background:rgba(224,57,95,.07);border-left:3px solid var(--danger)}
+  .post-row.selectable .post-chk{
+    width:20px;height:20px;border-radius:6px;border:2px solid var(--line2);
+    background:var(--bg2);flex-shrink:0;cursor:pointer;display:flex;align-items:center;
+    justify-content:center;transition:.13s;font-size:13px}
+  .post-row.selectable.selected .post-chk{background:var(--danger);border-color:var(--danger);color:#fff}
+  .post-row.selectable .post-ico,.post-row.selectable .post-main,.post-row.selectable .post-meta,
+  .post-row.selectable .post-dates{cursor:pointer}
+
   /* ── empty state ── */
   .empty-state{padding:60px 20px;text-align:center;color:var(--dim);grid-column:1/-1}
   .empty-state .ico{font-size:38px;opacity:.55;margin-bottom:12px}
@@ -390,7 +419,17 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
         <input id="q" placeholder="가이드 검색" autocomplete="off">
       </div>
-      <button class="primarybtn" id="addGuideBtn">+ 새 가이드 추가</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="dangerbtn" id="multiDeleteBtn" style="font-size:12.5px">☑️ 선택 삭제</button>
+        <button class="primarybtn" id="addGuideBtn">+ 새 가이드 추가</button>
+      </div>
+    </div>
+    <!-- 선택 삭제 액션 바 -->
+    <div class="select-bar" id="selectBar">
+      <span class="sel-info">게시글을 선택하세요 &nbsp;·&nbsp; <span id="selCount">0</span>개 선택됨</span>
+      <button class="selbtn selall" id="selAllBtn">전체 선택</button>
+      <button class="selbtn" id="selDeleteBtn" disabled>🗑 선택 삭제</button>
+      <button class="selbtn cancel" id="selCancelBtn">취소</button>
     </div>
     <div class="board-wrap" id="grid">
       <div class="empty-state"><div class="ico">⏳</div><p>가이드를 불러오는 중…</p></div>
@@ -886,6 +925,118 @@ function botEntryToGuide(key, entry) {
 let manualGuides = []; // 수동으로 작성한 가이드 목록 (guides:list)
 let botGuides = [];    // 봇이 올린 패치노트 목록 (board/guides)
 
+/* ══════════════════════════════════════════════════════════════
+   다중 선택 삭제
+   ══════════════════════════════════════════════════════════════ */
+let selectMode=false;
+let selectedIds=new Set();
+
+function enterSelectMode(){
+  selectMode=true;
+  selectedIds.clear();
+  document.getElementById("selectBar").classList.add("show");
+  document.querySelector(".toolbar-row").style.display="none";
+  updateSelBar();
+  renderGrid();
+}
+function exitSelectMode(){
+  selectMode=false;
+  selectedIds.clear();
+  document.getElementById("selectBar").classList.remove("show");
+  document.querySelector(".toolbar-row").style.display="";
+  renderGrid();
+}
+function updateSelBar(){
+  document.getElementById("selCount").textContent=selectedIds.size;
+  document.getElementById("selDeleteBtn").disabled=selectedIds.size===0;
+  const total=guides.length;
+  document.getElementById("selAllBtn").textContent=
+    selectedIds.size>0&&selectedIds.size===total?"전체 해제":"전체 선택";
+}
+function toggleSelect(id){
+  if(selectedIds.has(id))selectedIds.delete(id);
+  else selectedIds.add(id);
+  updateSelBar();
+  document.querySelectorAll(".post-row.selectable").forEach(row=>{
+    if(row.dataset.id===id){
+      row.classList.toggle("selected",selectedIds.has(id));
+      const chk=row.querySelector(".post-chk");
+      if(chk)chk.textContent=selectedIds.has(id)?"✓":"";
+    }
+  });
+}
+
+document.getElementById("multiDeleteBtn").onclick=enterSelectMode;
+document.getElementById("selCancelBtn").onclick=exitSelectMode;
+document.getElementById("selAllBtn").onclick=()=>{
+  const selectable=guides.map(g=>g.id);
+  const total=selectable.length;
+  if(selectedIds.size===total){ selectedIds.clear(); }
+  else{ selectable.forEach(id=>selectedIds.add(id)); }
+  updateSelBar();
+  document.querySelectorAll(".post-row.selectable").forEach(row=>{
+    row.classList.toggle("selected",selectedIds.has(row.dataset.id));
+    const chk=row.querySelector(".post-chk");
+    if(chk)chk.textContent=selectedIds.has(row.dataset.id)?"✓":"";
+  });
+};
+
+document.getElementById("selDeleteBtn").onclick=()=>{
+  if(selectedIds.size===0)return;
+  const ids=[...selectedIds];
+  const targets=guides.filter(g=>ids.includes(g.id));
+  const allNoAuthor=targets.every(g=>!g.authorPwHash);
+
+  openPwModal({
+    title:"🗑 선택 삭제 확인 ("+ids.length+"개)",
+    desc: allNoAuthor
+      ? "선택한 게시글에 작성자 정보가 없어요.<br>운영자 비밀번호를 입력해주세요."
+      : "운영자 비밀번호: 선택한 모든 게시글 삭제<br>작성자 비밀번호: 본인이 작성한 게시글만 삭제<br><br>비밀번호를 입력해주세요.",
+    onConfirm: async(pw)=>{
+      const isAdmin=await isAdminPw(pw);
+      let toDelete=[];
+      if(isAdmin){
+        toDelete=ids;
+      } else {
+        for(const g of targets){
+          if(await checkAuthorPw(g,pw)) toDelete.push(g.id);
+        }
+        if(toDelete.length===0) return false;
+      }
+
+      for(const id of toDelete){
+        const tg=guides.find(x=>x.id===id);
+        if(tg&&tg._botEntry){
+          // 패치노트: Firebase에서 삭제
+          try{
+            const pushKey=id.replace(/^bot-/,"");
+            if(fbdb) await fbdb.ref("board/guides/"+pushKey).remove();
+            botGuides=botGuides.filter(g=>g.id!==id);
+          }catch(e){console.warn("bot delete err",e);}
+        } else {
+          // 일반 게시글: storage에서 삭제
+          manualGuides=manualGuides.filter(g=>g.id!==id);
+          await storage.delete("guide:"+id+":content",true);
+          unwatchLock(id);
+          await writeLock(id,null);
+          delete lockState[id];
+        }
+      }
+      guides=[...botGuides,...manualGuides];
+      sortGuides();
+      await saveJSON("guides:list",manualGuides,true);
+
+      const skipped=ids.length-toDelete.length;
+      exitSelectMode();
+      if(skipped>0)
+        toast(toDelete.length+"개 삭제 완료. "+skipped+"개는 비밀번호 불일치로 건너뜀.");
+      else
+        toast(toDelete.length+"개를 삭제했어요.");
+      return true;
+    }
+  });
+};
+
 /* ── 방문자 카운터 ── */
 async function initVisitorCounter(){
   const todayKey="visitor:day:"+new Date().toISOString().slice(0,10); // YYYY-MM-DD
@@ -940,9 +1091,11 @@ async function init(){
   if(fbdb && !window.storage){
     fbdb.ref("board/guides").on("value", snap => {
       botGuides = [];
+      const seenBotIds = new Set();
       if(snap.exists()){
         snap.forEach(child => {
-          botGuides.push(botEntryToGuide(child.key, child.val()));
+          const g = botEntryToGuide(child.key, child.val());
+          if(!seenBotIds.has(g.id)){ seenBotIds.add(g.id); botGuides.push(g); }
         });
         botGuides.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       }
@@ -972,7 +1125,16 @@ async function init(){
 function renderGrid(){
   const q=(document.getElementById("q").value||"").trim().toLowerCase();
   const grid=document.getElementById("grid");
-  const filtered=guides.filter(g=>!q||g.title.toLowerCase().includes(q)||(g.desc||"").toLowerCase().includes(q));
+  // 중복 id 제거 (Firebase 중복 push 방어)
+  const seenIds=new Set();
+  const filtered=guides.filter(g=>{
+    if(!q||g.title.toLowerCase().includes(q)||(g.desc||"").toLowerCase().includes(q)){
+      if(seenIds.has(g.id))return false;
+      seenIds.add(g.id);
+      return true;
+    }
+    return false;
+  });
   grid.innerHTML="";
   if(filtered.length===0&&q){
     grid.innerHTML='<div class="empty-state"><div class="ico">🔍</div><p>"'+esc(q)+'"와 일치하는 가이드가 없어요.</p></div>';
@@ -989,26 +1151,57 @@ function renderGrid(){
   filtered.forEach(g=>{
     const el=document.createElement("div");
     const lock=getActiveLock(g.id);
-    el.className="post-row"+(lock?" locked":"");
-    el.style.setProperty("--bar",colorFor(g.id));
-    el.innerHTML=
-      '<div class="post-ico">'+esc(g.icon||"📘")+'</div>'+
-      '<div class="post-main">'+
-        '<div class="post-title">'+esc(g.title)+
-          (g.blockCount?'<span class="post-cnt">['+g.blockCount+']</span>':'')+
-          (lock?'<span class="lock-badge in-row">🔒 '+esc(lock.nickname)+'님 편집 중</span>':'')+
+    const isSel=selectMode&&selectedIds.has(g.id);
+    const isBot=!!g._botEntry;
+
+    if(selectMode){
+      el.className="post-row selectable"+(isSel?" selected":"");
+      el.dataset.id=g.id;
+      el.style.setProperty("--bar",colorFor(g.id));
+      el.innerHTML=
+        '<div class="post-chk">'+( isSel?"✓":"")+'</div>'+
+        '<div class="post-ico">'+esc(g.icon||"📘")+'</div>'+
+        '<div class="post-main">'+
+          '<div class="post-title">'+esc(g.title)+
+            (g.blockCount?'<span class="post-cnt">['+g.blockCount+']</span>':'')+
+          '</div>'+
+          (g.desc?'<div class="post-desc">'+esc(g.desc)+'</div>':'')+
         '</div>'+
-        (g.desc?'<div class="post-desc">'+esc(g.desc)+'</div>':'')+
-      '</div>'+
-      '<div class="post-meta">'+esc(g.author||"관리자")+'</div>'+
-      '<div class="post-dates">'+
-        '<div class="date-row"><span class="date-label">등록</span><span>'+fmtDateShort(g.createdAt||g.updatedAt)+'</span></div>'+
-        (g.createdAt&&g.updatedAt&&g.updatedAt!==g.createdAt
-          ?'<div class="date-row"><span class="date-label">수정</span><span class="date-updated">'+fmtDateShort(g.updatedAt)+'</span></div>':'')+
-      '</div>';
-    el.onclick=()=>openGuide(g.id);
+        '<div class="post-meta">'+esc(g.author||"관리자")+'</div>'+
+        '<div class="post-dates">'+
+          '<div class="date-row"><span class="date-label">등록</span><span>'+fmtDateShort(g.createdAt||g.updatedAt)+'</span></div>'+
+          (g.createdAt&&g.updatedAt&&g.updatedAt!==g.createdAt
+            ?'<div class="date-row"><span class="date-label">수정</span><span class="date-updated">'+fmtDateShort(g.updatedAt)+'</span></div>':'')+
+        '</div>';
+      el.onclick=()=>toggleSelect(g.id);
+    } else {
+      el.className="post-row"+(lock?" locked":"");
+      el.style.setProperty("--bar",colorFor(g.id));
+      el.innerHTML=
+        '<div class="post-ico">'+esc(g.icon||"📘")+'</div>'+
+        '<div class="post-main">'+
+          '<div class="post-title">'+esc(g.title)+
+            (g.blockCount?'<span class="post-cnt">['+g.blockCount+']</span>':'')+
+            (lock?'<span class="lock-badge in-row">🔒 '+esc(lock.nickname)+'님 편집 중</span>':'')+
+          '</div>'+
+          (g.desc?'<div class="post-desc">'+esc(g.desc)+'</div>':'')+
+        '</div>'+
+        '<div class="post-meta">'+esc(g.author||"관리자")+'</div>'+
+        '<div class="post-dates">'+
+          '<div class="date-row"><span class="date-label">등록</span><span>'+fmtDateShort(g.createdAt||g.updatedAt)+'</span></div>'+
+          (g.createdAt&&g.updatedAt&&g.updatedAt!==g.createdAt
+            ?'<div class="date-row"><span class="date-label">수정</span><span class="date-updated">'+fmtDateShort(g.updatedAt)+'</span></div>':'')+
+        '</div>';
+      el.onclick=()=>openGuide(g.id);
+    }
     board.appendChild(el);
   });
+
+  // 선택 모드일 땐 "새 가이드 작성" 행 숨김
+  if(selectMode){
+    grid.appendChild(board);
+    return;
+  }
 
   const write=document.createElement("div");
   write.className="post-write";
