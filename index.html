@@ -71,7 +71,7 @@
     border-bottom:1px solid var(--line);background:rgba(20,30,70,.025)}
   .board-head .h-title{flex:1}
   .board-head .h-meta{white-space:nowrap;width:90px;text-align:right}
-  .board-head .h-meta:last-child{margin-left:0}
+  .board-head .h-meta:last-child{margin-left:0;width:108px}
 
   .post-row{position:relative;display:flex;align-items:center;gap:16px;padding:17px 22px;cursor:pointer;
     border-bottom:1px solid var(--line);transition:background .14s,transform .14s}
@@ -326,6 +326,32 @@
 
   .foot{text-align:center;color:var(--dim);font-size:11.5px;margin-top:30px}
 
+  /* ── 방문자 카운터 ── */
+  .visitor-bar{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  .visitor-pill{display:inline-flex;align-items:center;gap:5px;background:rgba(74,108,247,.10);
+    border:1px solid rgba(74,108,247,.28);color:var(--brand);font-size:11.5px;font-weight:700;
+    padding:4px 11px;border-radius:999px;white-space:nowrap}
+  .visitor-pill .v-num{font-size:13px;font-weight:800;color:var(--brand)}
+  .today-pill{display:inline-flex;align-items:center;gap:5px;background:rgba(15,184,166,.10);
+    border:1px solid rgba(15,184,166,.28);color:var(--brand2);font-size:11.5px;font-weight:700;
+    padding:4px 11px;border-radius:999px;white-space:nowrap}
+  .today-pill .v-num{font-size:13px;font-weight:800;color:var(--brand2)}
+
+  /* ── 날짜 메타 (목록) ── */
+  .post-dates{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:11.5px;color:var(--dim);white-space:nowrap;flex-shrink:0;width:108px}
+  .post-dates .date-row{display:flex;align-items:center;gap:4px}
+  .date-label{font-size:10.5px;font-weight:700;color:var(--dim);opacity:.7}
+  .date-updated{color:var(--brand2);font-weight:700}
+  @media (max-width:560px){
+    .post-dates{display:none}
+  }
+
+  /* ── 날짜 메타 (상세) ── */
+  #dDateMeta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--dim);font-weight:600;margin-top:2px}
+  #dDateMeta .dmeta-item{display:inline-flex;align-items:center;gap:4px}
+  #dDateMeta .dmeta-label{opacity:.7;font-size:11px}
+  #dDateMeta .dmeta-updated{color:var(--brand2)}
+
   /* 화면 전환: hidden 속성 대신 명시적 display 제어 */
   #gridView.hidden-view,
   #detailView.hidden-view{display:none!important}
@@ -355,6 +381,10 @@
 
   <!-- 목록 화면 -->
   <div id="gridView">
+    <div class="visitor-bar">
+      <span class="visitor-pill">👥 총 방문자 <span class="v-num" id="visitorTotal">-</span></span>
+      <span class="today-pill">📅 오늘 <span class="v-num" id="visitorToday">-</span></span>
+    </div>
     <div class="toolbar-row">
       <div class="search">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -386,6 +416,7 @@
         <input class="detail-title-input" id="dTitle" placeholder="가이드 제목">
         <input class="detail-desc-input" id="dDesc" placeholder="한 줄 설명 (선택)">
         <span id="dAuthor" style="font-size:11.5px;color:var(--dim);font-weight:600"></span>
+        <div id="dDateMeta"></div>
       </div>
     </div>
     <div class="detail-toolbar">
@@ -751,6 +782,25 @@ function fmtAgo(ts){
   return Math.floor(mo/12)+"년 전";
 }
 function fmtTime(ts){return new Date(ts).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"});}
+function fmtDate(ts){
+  if(!ts)return "-";
+  const d=new Date(ts);
+  return d.getFullYear()+"."
+    +String(d.getMonth()+1).padStart(2,"0")+"."
+    +String(d.getDate()).padStart(2,"0")
+    +" "+String(d.getHours()).padStart(2,"0")+":"
+    +String(d.getMinutes()).padStart(2,"0");
+}
+function fmtDateShort(ts){
+  if(!ts)return "-";
+  const d=new Date(ts);
+  const now=new Date();
+  const sameYear=d.getFullYear()===now.getFullYear();
+  if(sameYear)
+    return String(d.getMonth()+1).padStart(2,"0")+"."+String(d.getDate()).padStart(2,"0")
+      +" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  return d.getFullYear()+"."+String(d.getMonth()+1).padStart(2,"0")+"."+String(d.getDate()).padStart(2,"0");
+}
 function toast(msg,type){
   const t=document.getElementById("toast");
   t.textContent=msg; t.className="toast show"+(type==="err"?" err":"");
@@ -798,6 +848,12 @@ function gridColsFor(n){
   return 4;
 }
 
+/* ── 정렬: updatedAt 내림차순 (최근 수정/등록이 맨 위) ── */
+function sortGuides(){
+  guides.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  manualGuides.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+}
+
 /* ── 상태 ── */
 let guides=[];
 let currentGuide=null;
@@ -830,6 +886,51 @@ function botEntryToGuide(key, entry) {
 let manualGuides = []; // 수동으로 작성한 가이드 목록 (guides:list)
 let botGuides = [];    // 봇이 올린 패치노트 목록 (board/guides)
 
+/* ── 방문자 카운터 ── */
+async function initVisitorCounter(){
+  const todayKey="visitor:day:"+new Date().toISOString().slice(0,10); // YYYY-MM-DD
+  const totalKey="visitor:total";
+  const sessionKey="visited_"+new Date().toISOString().slice(0,10);
+
+  // 이미 오늘 카운트됐으면 스킵 (새로고침마다 중복 카운트 방지)
+  const alreadyCounted=sessionStorage.getItem(sessionKey);
+
+  if(fbdb && !window.storage){
+    // Firebase: 오늘 카운트 + 총 카운트 실시간 구독
+    const todayRef=fbdb.ref("board/"+encodeURIComponent(totalKey.replace("visitor:","v:")));
+    const dayRef=fbdb.ref("board/"+encodeURIComponent(todayKey));
+    const totalRef=fbdb.ref("board/v-total");
+
+    totalRef.on("value",snap=>{
+      const v=snap.exists()?snap.val():0;
+      document.getElementById("visitorTotal").textContent=v.toLocaleString("ko-KR");
+    });
+    dayRef.on("value",snap=>{
+      const v=snap.exists()?snap.val():0;
+      document.getElementById("visitorToday").textContent=v.toLocaleString("ko-KR");
+    });
+    if(!alreadyCounted){
+      sessionStorage.setItem(sessionKey,"1");
+      try{
+        await fbdb.ref("board/v-total").transaction(v=>(v||0)+1);
+        await fbdb.ref("board/"+encodeURIComponent(todayKey)).transaction(v=>(v||0)+1);
+      }catch(e){}
+    }
+  } else {
+    // 로컬 스토리지 폴백
+    let total=parseInt(localStorage.getItem("visitor:total")||"0");
+    let today=parseInt(localStorage.getItem(todayKey)||"0");
+    if(!alreadyCounted){
+      sessionStorage.setItem(sessionKey,"1");
+      total++; today++;
+      localStorage.setItem("visitor:total",total);
+      localStorage.setItem(todayKey,today);
+    }
+    document.getElementById("visitorTotal").textContent=total.toLocaleString("ko-KR");
+    document.getElementById("visitorToday").textContent=today.toLocaleString("ko-KR");
+  }
+}
+
 async function init(){
   let list = await loadJSON("guides:list", true);
   if(!list || !Array.isArray(list)) list = [];
@@ -846,6 +947,7 @@ async function init(){
         botGuides.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       }
       guides = [...botGuides, ...manualGuides];
+      sortGuides();
       guides.forEach(g => watchLock(g.id));
       if(currentGuide) renderLockBadgeDetail();
       else renderGrid();
@@ -853,6 +955,7 @@ async function init(){
   }
 
   guides = [...botGuides, ...manualGuides];
+  sortGuides();
   renderGrid();
   guides.forEach(g => watchLock(g.id));
   if(!fbdb || window.storage){
@@ -862,6 +965,7 @@ async function init(){
     if(currentGuide) renderLockBadgeDetail();
     else renderGrid();
   });
+  initVisitorCounter();
 }
 
 /* ── 목록 화면 (게시판) ── */
@@ -879,7 +983,7 @@ function renderGrid(){
 
   const head=document.createElement("div");
   head.className="board-head";
-  head.innerHTML='<span class="h-title">제목</span><span class="h-meta">작성자</span><span class="h-meta">수정일</span>';
+  head.innerHTML='<span class="h-title">제목</span><span class="h-meta">작성자</span><span class="h-meta" style="width:108px;text-align:right">작성일 / 수정일</span>';
   board.appendChild(head);
 
   filtered.forEach(g=>{
@@ -897,7 +1001,11 @@ function renderGrid(){
         (g.desc?'<div class="post-desc">'+esc(g.desc)+'</div>':'')+
       '</div>'+
       '<div class="post-meta">'+esc(g.author||"관리자")+'</div>'+
-      '<div class="post-meta">'+fmtAgo(g.updatedAt)+'</div>';
+      '<div class="post-dates">'+
+        '<div class="date-row"><span class="date-label">등록</span><span>'+fmtDateShort(g.createdAt||g.updatedAt)+'</span></div>'+
+        (g.createdAt&&g.updatedAt&&g.updatedAt!==g.createdAt
+          ?'<div class="date-row"><span class="date-label">수정</span><span class="date-updated">'+fmtDateShort(g.updatedAt)+'</span></div>':'')+
+      '</div>';
     el.onclick=()=>openGuide(g.id);
     board.appendChild(el);
   });
@@ -943,11 +1051,14 @@ document.getElementById("ngCreateBtn").onclick=async()=>{
   if(!author){toast("작성자 이름을 입력해주세요.","err");return;}
   if(!pw){toast("수정·삭제에 쓸 비밀번호를 입력해주세요.","err");return;}
   const authorPwHash=await hashPw(pw);
+  const now=Date.now();
   const g={id:uid(),icon:ngIcon,title,desc:document.getElementById("ngDesc").value.trim(),
-    author,authorPwHash,updatedAt:Date.now(),blockCount:0};
-  guides.push(g);
+    author,authorPwHash,createdAt:now,updatedAt:now,blockCount:0};
+  manualGuides.push(g);
+  guides=[...botGuides,...manualGuides];
+  sortGuides();
   watchLock(g.id);
-  await saveJSON("guides:list",guides,true);
+  await saveJSON("guides:list",manualGuides,true);
   closeNewGuideModal();
   openGuide(g.id,true,author);
 };
@@ -1087,6 +1198,15 @@ function renderDetail(){
   document.getElementById("dTitle").value=currentGuide.title||"";
   document.getElementById("dDesc").value=currentGuide.desc||"";
   document.getElementById("dAuthor").textContent=currentGuide.author?("✍️ "+currentGuide.author):"✍️ 관리자 작성";
+  // 날짜 메타
+  const dm=document.getElementById("dDateMeta");
+  const created=currentGuide.createdAt||currentGuide.updatedAt;
+  const updated=currentGuide.updatedAt;
+  let html='<span class="dmeta-item"><span class="dmeta-label">📅 작성</span> '+fmtDate(created)+'</span>';
+  if(updated&&created&&updated!==created){
+    html+='<span class="dmeta-item"><span class="dmeta-label">✏️ 수정</span> <span class="dmeta-updated">'+fmtDate(updated)+'</span></span>';
+  }
+  dm.innerHTML=html;
   renderBlocks();
   updateCapHint();
 }
@@ -1914,7 +2034,8 @@ async function doSave(){
   const ok=await saveJSON("guide:"+currentGuide.id+":content",currentContent,true);
   currentGuide.blockCount=currentContent.blocksOrder.length;
   currentGuide.updatedAt=Date.now();
-  const ok2=await saveJSON("guides:list",guides,true);
+  sortGuides();
+  const ok2=await saveJSON("guides:list",manualGuides,true);
   setSaveIndicator(ok&&ok2?"모두 저장됨 · "+fmtTime(Date.now()):"저장 실패 · 다시 시도해주세요","");
   if(!(ok&&ok2)) document.getElementById("saveIndicator").classList.add("failed");
   else document.getElementById("saveIndicator").classList.add("saved");
