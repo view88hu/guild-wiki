@@ -392,6 +392,52 @@
     .toolbar-row{flex-direction:column;align-items:stretch}
     .search{width:100%}
   }
+
+  /* ── 댓글 섹션 ── */
+  .comment-section{max-width:760px;margin:32px auto 0;padding-bottom:40px}
+  .comment-section-title{font-size:13.5px;font-weight:800;color:var(--muted);letter-spacing:.06em;
+    text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  .comment-section-title .cmt-count-badge{
+    background:color-mix(in srgb,var(--brand2) 15%,transparent);
+    color:var(--brand2);font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;
+    border:1px solid color-mix(in srgb,var(--brand2) 30%,transparent)}
+
+  /* 댓글 입력 폼 */
+  .cmt-form{background:var(--panel2);border:1px solid var(--line2);border-radius:14px;padding:14px 16px;margin-bottom:20px}
+  .cmt-form-row{display:flex;gap:8px;margin-bottom:8px}
+  .cmt-form-row input{flex:1;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);
+    font-size:13px;border-radius:8px;padding:8px 10px;outline:none}
+  .cmt-form-row input:focus{border-color:var(--brand2)}
+  .cmt-form textarea{width:100%;background:var(--bg2);border:1px solid var(--line2);color:var(--tx);
+    font-size:13.5px;border-radius:8px;padding:10px 12px;outline:none;resize:none;min-height:70px;
+    line-height:1.6;margin-bottom:8px}
+  .cmt-form textarea:focus{border-color:var(--brand2)}
+  .cmt-form-actions{display:flex;justify-content:flex-end}
+  .cmt-submit-btn{display:inline-flex;align-items:center;gap:6px;
+    background:linear-gradient(135deg,var(--brand),var(--brand2));
+    color:#06121b;font-size:13px;font-weight:800;border:0;border-radius:9px;padding:9px 18px;cursor:pointer;
+    box-shadow:0 6px 16px -8px rgba(70,224,196,.55);transition:.15s}
+  .cmt-submit-btn:hover{transform:translateY(-1px)}
+  .cmt-submit-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+  /* 댓글 목록 */
+  .cmt-list{display:flex;flex-direction:column;gap:10px}
+  .cmt-item{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;
+    position:relative;transition:border-color .14s}
+  .cmt-item:hover{border-color:var(--line2)}
+  .cmt-item.deleting{opacity:.4;pointer-events:none}
+  .cmt-header{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+  .cmt-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:800;color:#fff;flex-shrink:0}
+  .cmt-nick{font-size:13px;font-weight:700;color:var(--tx)}
+  .cmt-time{font-size:11.5px;color:var(--dim);margin-left:auto}
+  .cmt-body{font-size:14px;color:var(--tx);line-height:1.7;white-space:pre-wrap;word-break:break-word}
+  .cmt-del-btn{position:absolute;top:10px;right:10px;background:transparent;border:1px solid rgba(255,94,126,.35);
+    color:var(--danger);font-size:11px;font-weight:700;border-radius:7px;padding:4px 9px;cursor:pointer;
+    opacity:0;transition:.14s}
+  .cmt-item:hover .cmt-del-btn{opacity:1}
+  .cmt-del-btn:hover{background:rgba(255,94,126,.12)}
+  .cmt-empty{text-align:center;color:var(--dim);font-size:13px;padding:28px 0;opacity:.7}
 </style>
 
 <!-- 길드원 모두가 같은 글을 보는 공유 게시판을 위한 Firebase(무료) 연동 -->
@@ -479,6 +525,27 @@
     <div class="empty-state" id="blocksEmpty" hidden>
       <div class="ico">🗒️</div>
       <p>아직 작성된 내용이 없어요.<br>위 버튼이나 <b style="color:var(--brand2)">Ctrl+V</b> 붙여넣기로 텍스트·스크린샷을 자유롭게 추가해보세요.</p>
+    </div>
+
+    <!-- 댓글 섹션 (읽기 모드에서만 표시) -->
+    <div class="comment-section" id="commentSection" style="display:none">
+      <div class="comment-section-title">
+        💬 댓글
+        <span class="cmt-count-badge" id="cmtCountBadge">0</span>
+      </div>
+      <div class="cmt-form">
+        <div class="cmt-form-row">
+          <input id="cmtNick" placeholder="닉네임" maxlength="16" autocomplete="off">
+          <input id="cmtPw" type="password" placeholder="비밀번호 (삭제용)" maxlength="20" autocomplete="off">
+        </div>
+        <textarea id="cmtBody" placeholder="댓글을 입력하세요…" maxlength="500"></textarea>
+        <div class="cmt-form-actions">
+          <button class="cmt-submit-btn" id="cmtSubmitBtn">댓글 달기 ✓</button>
+        </div>
+      </div>
+      <div class="cmt-list" id="cmtList">
+        <div class="cmt-empty">첫 댓글을 남겨보세요 👋</div>
+      </div>
     </div>
   </div>
 
@@ -925,6 +992,18 @@ function botEntryToGuide(key, entry) {
 let manualGuides = []; // 수동으로 작성한 가이드 목록 (guides:list)
 let botGuides = [];    // 봇이 올린 패치노트 목록 (board/guides)
 
+/* 댓글 수 캐시: {guideId: number} */
+const cmtCountCache = {};
+
+async function loadAllCommentCounts(guideList) {
+  await Promise.all(guideList.map(async g => {
+    try {
+      const list = (await loadJSON("guide:" + g.id + ":comments", true)) || [];
+      cmtCountCache[g.id] = list.length;
+    } catch(e) { cmtCountCache[g.id] = 0; }
+  }));
+}
+
 /* ══════════════════════════════════════════════════════════════
    다중 선택 삭제
    ══════════════════════════════════════════════════════════════ */
@@ -1109,6 +1188,7 @@ async function init(){
 
   guides = [...botGuides, ...manualGuides];
   sortGuides();
+  await loadAllCommentCounts(guides);
   renderGrid();
   guides.forEach(g => watchLock(g.id));
   if(!fbdb || window.storage){
@@ -1163,7 +1243,7 @@ function renderGrid(){
         '<div class="post-ico">'+esc(g.icon||"📘")+'</div>'+
         '<div class="post-main">'+
           '<div class="post-title">'+esc(g.title)+
-            (g.blockCount?'<span class="post-cnt">['+g.blockCount+']</span>':'')+
+            (cmtCountCache[g.id]?'<span class="post-cnt">['+cmtCountCache[g.id]+']</span>':'')+
           '</div>'+
           (g.desc?'<div class="post-desc">'+esc(g.desc)+'</div>':'')+
         '</div>'+
@@ -1181,7 +1261,7 @@ function renderGrid(){
         '<div class="post-ico">'+esc(g.icon||"📘")+'</div>'+
         '<div class="post-main">'+
           '<div class="post-title">'+esc(g.title)+
-            (g.blockCount?'<span class="post-cnt">['+g.blockCount+']</span>':'')+
+            (cmtCountCache[g.id]?'<span class="post-cnt">['+cmtCountCache[g.id]+']</span>':'')+
             (lock?'<span class="lock-badge in-row">🔒 '+esc(lock.nickname)+'님 편집 중</span>':'')+
           '</div>'+
           (g.desc?'<div class="post-desc">'+esc(g.desc)+'</div>':'')+
@@ -1324,6 +1404,9 @@ async function openGuide(id,startInEdit,autoNickname){
   }
   renderDetail();
   setSaveIndicator("모두 저장됨","saved");
+  // 읽기 모드 진입 시 댓글 섹션 표시 (편집 모드엔 숨김)
+  if(viewMode==="read") showCommentSection(id);
+  else hideCommentSection();
 }
 async function backToGrid(){
   // 버튼 원복 (봇 글에서 숨겼을 수 있으므로)
@@ -1332,6 +1415,7 @@ async function backToGrid(){
   document.getElementById("botDeleteGuideBtn").style.display="none";
   if(myLockGuideId)await releaseLock(myLockGuideId);
   if(currentGuide)unwatchLock(currentGuide.id);
+  hideCommentSection();
   document.getElementById("detailView").classList.remove("active-view");
   document.getElementById("detailView").classList.add("hidden-view");
   document.getElementById("gridView").classList.remove("hidden-view");
@@ -1384,6 +1468,9 @@ function setViewMode(m){
     const countEl=document.getElementById("postSearchCount");
     if(countEl){countEl.textContent="";countEl.className="ps-count";}
   }
+  // 읽기 ↔ 편집 전환 시 댓글 섹션 토글
+  if(m==="read" && currentGuide) showCommentSection(currentGuide.id);
+  else hideCommentSection();
 }
 
 function renderDetail(){
@@ -2269,6 +2356,158 @@ document.addEventListener("keydown",e=>{
 });
 
 init();
+
+/* ══════════════════════════════════════════════════════════════
+   댓글(COMMENT) 시스템
+   저장 구조: guide:{id}:comments → [{id,nick,body,pwHash,createdAt}, ...]
+   Firebase 연결 시 실시간 구독, 아니면 폴링 방식으로 갱신
+   ══════════════════════════════════════════════════════════════ */
+let cmtGuideId = null;
+let cmtFbRef = null;
+let cmtPollTimer = null;
+const AVATAR_COLORS = ["#4a6cf7","#0fb8a6","#d99a12","#e0395f","#7f9bff","#5fd089","#ff9f43","#37cdbf"];
+
+function cmtColorFor(nick) {
+  let h = 0;
+  for (const ch of String(nick)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+function cmtInitials(nick) {
+  return (nick || "?").slice(0, 1).toUpperCase();
+}
+
+async function loadComments(guideId) {
+  return (await loadJSON("guide:" + guideId + ":comments", true)) || [];
+}
+async function saveComments(guideId, list) {
+  return await saveJSON("guide:" + guideId + ":comments", list, true);
+}
+
+function renderComments(list) {
+  const el = document.getElementById("cmtList");
+  const badge = document.getElementById("cmtCountBadge");
+  if (!el) return;
+  if (cmtGuideId) cmtCountCache[cmtGuideId] = list.length;
+  badge.textContent = list.length;
+  if (list.length === 0) {
+    el.innerHTML = '<div class="cmt-empty">첫 댓글을 남겨보세요 👋</div>';
+    return;
+  }
+  el.innerHTML = list.map(c => {
+    const color = cmtColorFor(c.nick);
+    return `<div class="cmt-item" data-cid="${esc(c.id)}">
+      <div class="cmt-header">
+        <div class="cmt-avatar" style="background:${color}">${esc(cmtInitials(c.nick))}</div>
+        <span class="cmt-nick">${esc(c.nick)}</span>
+        <span class="cmt-time">${fmtAgo(c.createdAt)}</span>
+      </div>
+      <div class="cmt-body">${esc(c.body)}</div>
+      <button class="cmt-del-btn" data-cid="${esc(c.id)}" title="댓글 삭제">🗑 삭제</button>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".cmt-del-btn").forEach(btn => {
+    btn.onclick = () => deleteCmt(btn.dataset.cid);
+  });
+}
+
+async function deleteCmt(cid) {
+  const item = document.querySelector(`.cmt-item[data-cid="${cid}"]`);
+  // 비밀번호 확인 모달 재활용
+  openPwModal({
+    title: "🗑 댓글 삭제",
+    desc: "작성 시 입력한 비밀번호를 입력하면 삭제할 수 있어요.<br>(운영자는 관리자 비밀번호로도 가능해요)",
+    onConfirm: async (pw) => {
+      const list = await loadComments(cmtGuideId);
+      const cmt = list.find(c => c.id === cid);
+      if (!cmt) return true;
+      const isAdmin = await isAdminPw(pw);
+      const pwHash = await hashPw(pw);
+      if (!isAdmin && pwHash !== cmt.pwHash) return false;
+      if (item) item.classList.add("deleting");
+      const next = list.filter(c => c.id !== cid);
+      await saveComments(cmtGuideId, next);
+      cmtCountCache[cmtGuideId] = next.length;
+      // Firebase 실시간이면 구독이 자동 갱신, 아니면 직접 렌더
+      if (!fbdb || window.storage) renderComments(next);
+      toast("댓글을 삭제했어요.");
+      return true;
+    }
+  });
+}
+
+function watchComments(guideId) {
+  unwatchComments();
+  cmtGuideId = guideId;
+  if (fbdb && !window.storage) {
+    const ref = fbdb.ref("board/" + encodeURIComponent("guide:" + guideId + ":comments"));
+    ref.on("value", snap => {
+      const list = snap.exists() ? JSON.parse(snap.val()) : [];
+      renderComments(list);
+    });
+    cmtFbRef = ref;
+  } else {
+    // 폴링: 30초마다 갱신
+    loadComments(guideId).then(renderComments);
+    cmtPollTimer = setInterval(async () => {
+      if (cmtGuideId === guideId) renderComments(await loadComments(guideId));
+    }, 30000);
+  }
+}
+function unwatchComments() {
+  if (cmtFbRef) { cmtFbRef.off(); cmtFbRef = null; }
+  if (cmtPollTimer) { clearInterval(cmtPollTimer); cmtPollTimer = null; }
+  cmtGuideId = null;
+}
+
+function showCommentSection(guideId) {
+  const sec = document.getElementById("commentSection");
+  if (sec) sec.style.display = "";
+  watchComments(guideId);
+}
+function hideCommentSection() {
+  const sec = document.getElementById("commentSection");
+  if (sec) sec.style.display = "none";
+  unwatchComments();
+  const badge = document.getElementById("cmtCountBadge");
+  if (badge) badge.textContent = "0";
+  const list = document.getElementById("cmtList");
+  if (list) list.innerHTML = '<div class="cmt-empty">첫 댓글을 남겨보세요 👋</div>';
+}
+
+// 댓글 제출
+document.getElementById("cmtSubmitBtn").onclick = async () => {
+  const nick = document.getElementById("cmtNick").value.trim();
+  const pw = document.getElementById("cmtPw").value;
+  const body = document.getElementById("cmtBody").value.trim();
+  if (!nick) { toast("닉네임을 입력해주세요.", "err"); return; }
+  if (!pw) { toast("삭제에 쓸 비밀번호를 입력해주세요.", "err"); return; }
+  if (!body) { toast("댓글 내용을 입력해주세요.", "err"); return; }
+  if (!cmtGuideId) { toast("게시글을 먼저 열어주세요.", "err"); return; }
+  const btn = document.getElementById("cmtSubmitBtn");
+  btn.disabled = true;
+  try {
+    const pwHash = await hashPw(pw);
+    const cmt = { id: uid(), nick, body, pwHash, createdAt: Date.now() };
+    const list = await loadComments(cmtGuideId);
+    list.push(cmt);
+    const ok = await saveComments(cmtGuideId, list);
+    if (!ok) { toast("댓글 저장에 실패했어요.", "err"); return; }
+    document.getElementById("cmtBody").value = "";
+    cmtCountCache[cmtGuideId] = list.length;
+    // Firebase 구독이 없으면 직접 렌더
+    if (!fbdb || window.storage) renderComments(list);
+    toast("댓글을 달았어요! 🎉");
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// Enter키 제출 방지 (textarea에서는 줄바꿈 허용)
+document.getElementById("cmtBody").addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    document.getElementById("cmtSubmitBtn").click();
+  }
+});
 
 /* ── 상세 화면 상단 바 높이를 추적해 .detail-toolbar가 그 아래에 고정되도록 동기화 ── */
 (function syncDetailTopHeight(){
