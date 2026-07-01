@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>게임가이드 · [ 빌런 ] 착한사람들</title>
+<title>게임가이드 · [ DARK ] 잔혹동화특선 · [ 빌런 ] 착한사람들</title>
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
@@ -86,6 +86,12 @@
   .post-main{flex:1;min-width:0}
   .post-title{font-size:16px;font-weight:700;letter-spacing:-.01em;line-height:1.35;
     display:flex;align-items:center;gap:8px;word-break:keep-all}
+  .post-row.is-patch{background:linear-gradient(135deg,rgba(37,99,235,.09),rgba(96,165,250,.03) 60%)}
+  .post-row.is-patch::before{opacity:.9;background:linear-gradient(180deg,#3b82f6,#2563eb)}
+  .post-row.is-patch:hover{background:linear-gradient(135deg,rgba(37,99,235,.15),rgba(96,165,250,.05) 60%)}
+  .post-row.is-patch .post-ico{background:rgba(37,99,235,.12);border-color:rgba(37,99,235,.28)}
+  .patch-tag{font-size:10.5px;font-weight:800;letter-spacing:.02em;flex-shrink:0;
+    color:#2563eb;background:rgba(37,99,235,.13);padding:2px 8px;border-radius:999px}
   .post-cnt{font-size:11px;font-weight:700;flex-shrink:0;
     color:color-mix(in srgb,var(--bar,var(--brand2)) 75%, var(--tx));
     background:color-mix(in srgb,var(--bar,var(--brand2)) 16%, transparent);
@@ -449,7 +455,7 @@
   <header>
     <div>
       <div class="eyebrow">Guild Wiki · Guide</div>
-      <h1>게임가이드 · <span class="guildname">[ 빌런 ] 착한사람들</span></h1>
+      <h1>게임가이드<br><span class="guildname">[ DARK ] 잔혹동화특선 · [ 빌런 ] 착한사람들</span></h1>
       <div class="sub">스크린샷과 글로 자유롭게 정리하는 우리 길드의 게임 가이드</div>
     </div>
   </header>
@@ -1235,14 +1241,14 @@ function renderGrid(){
     const isBot=!!g._botEntry;
 
     if(selectMode){
-      el.className="post-row selectable"+(isSel?" selected":"");
+      el.className="post-row selectable"+(isSel?" selected":"")+(isBot?" is-patch":"");
       el.dataset.id=g.id;
-      el.style.setProperty("--bar",colorFor(g.id));
+      el.style.setProperty("--bar",isBot?"#2563eb":colorFor(g.id));
       el.innerHTML=
         '<div class="post-chk">'+( isSel?"✓":"")+'</div>'+
         '<div class="post-ico">'+esc(g.icon||"📘")+'</div>'+
         '<div class="post-main">'+
-          '<div class="post-title">'+esc(g.title)+
+          '<div class="post-title">'+(isBot?'<span class="patch-tag">패치노트</span>':'')+esc(g.title)+
             (cmtCountCache[g.id]?'<span class="post-cnt">['+cmtCountCache[g.id]+']</span>':'')+
           '</div>'+
           (g.desc?'<div class="post-desc">'+esc(g.desc)+'</div>':'')+
@@ -1255,12 +1261,12 @@ function renderGrid(){
         '</div>';
       el.onclick=()=>toggleSelect(g.id);
     } else {
-      el.className="post-row"+(lock?" locked":"");
-      el.style.setProperty("--bar",colorFor(g.id));
+      el.className="post-row"+(lock?" locked":"")+(isBot?" is-patch":"");
+      el.style.setProperty("--bar",isBot?"#2563eb":colorFor(g.id));
       el.innerHTML=
         '<div class="post-ico">'+esc(g.icon||"📘")+'</div>'+
         '<div class="post-main">'+
-          '<div class="post-title">'+esc(g.title)+
+          '<div class="post-title">'+(isBot?'<span class="patch-tag">패치노트</span>':'')+esc(g.title)+
             (cmtCountCache[g.id]?'<span class="post-cnt">['+cmtCountCache[g.id]+']</span>':'')+
             (lock?'<span class="lock-badge in-row">🔒 '+esc(lock.nickname)+'님 편집 중</span>':'')+
           '</div>'+
